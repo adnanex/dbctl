@@ -1,14 +1,19 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/adnanex/dbctl/pkg/ui"
 )
+
+//go:embed longdesc/version.txt
+var versionLong string
 
 // Build-time variables — set via ldflags during `go build`
 var (
@@ -20,7 +25,7 @@ var (
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of dbctl",
-	Long:  "Display the current version, build commit, build date, and Go runtime information.",
+	Long:  strings.TrimRight(versionLong, "\n"),
 	Run: func(cmd *cobra.Command, args []string) {
 		short, _ := cmd.Flags().GetBool("short")
 		if short {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strings"
@@ -12,15 +13,16 @@ import (
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
+//go:embed longdesc/up.txt
+var upLong string
+
+//go:embed longdesc/down.txt
+var downLong string
+
 var upCmd = &cobra.Command{
 	Use:   "up",
 	Short: "Generate Docker Compose and start database containers",
-	Long: `Generate a docker-compose.yml from your dbctl config and start all database
-containers. The compose file is auto-generated based on your configured database
-targets (MySQL, PostgreSQL, MongoDB, etc.).
-
-Use --compose to specify a custom compose file instead of auto-generating one.
-Use --generate-only to generate the compose file without starting containers.`,
+	Long:  strings.TrimRight(upLong, "\n"),
 	Example: `  dbctl up                          # Generate compose + start containers
   dbctl up --generate-only          # Just generate docker-compose.dbctl.yml
   dbctl up --compose ./my-compose.yml  # Use custom compose file
@@ -31,7 +33,7 @@ Use --generate-only to generate the compose file without starting containers.`,
 var downCmd = &cobra.Command{
 	Use:   "down",
 	Short: "Stop database containers",
-	Long:  `Stop all database containers managed by dbctl. Use --volumes to also remove data volumes.`,
+	Long:  strings.TrimRight(downLong, "\n"),
 	Example: `  dbctl down                # Stop containers
   dbctl down --volumes      # Stop containers and remove data volumes`,
 	RunE: runDown,

@@ -1,0 +1,5 @@
+dbctl is a command-line tool that automates creating databases, configuring
+users, managing passwords, and granting permissions declaratively from YAML files.
+
+Define your desired database state in YAML and let dbctl converge to it
+idempotently — no more brittle shell scripts or manual SQL one-liners.

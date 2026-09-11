@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,14 +21,13 @@ import (
 	_ "github.com/adnanex/dbctl/pkg/driver/postgres"
 )
 
+//go:embed longdesc/provision.txt
+var provisionLong string
+
 var provisionCmd = &cobra.Command{
 	Use:   "provision",
 	Short: "Provision databases, users, and permissions from config",
-	Long: `Provision databases, users, and permissions as declared in a YAML configuration file.
-
-This is the core command of dbctl. It reads your config.yaml, connects to database
-engines (starting containers if configured), and converges the live state to match
-your declarations — creating databases, users, and grants idempotently.`,
+	Long:  strings.TrimRight(provisionLong, "\n"),
 	Example: `  dbctl provision                          # Use ./config.yaml
   dbctl provision -c my-config.yaml        # Specify config file
   dbctl provision --dry-run                # Simulate without changes

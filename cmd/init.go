@@ -1,23 +1,22 @@
 package cmd
 
 import (
+	_ "embed"
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	"github.com/adnanex/dbctl/pkg/config"
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
+//go:embed longdesc/init.txt
+var initLong string
+
 var initCmd = &cobra.Command{
 	Use:   "init [destination]",
 	Short: "Scaffold a dbctl configuration file",
-	Long: `Generate a template configuration file for dbctl.
-
-Destinations:
-  local / .       Create ./config.yaml (default)
-  global / ~      Create ~/.dbctl/config.yaml
-  config / .config Create ~/.config/dbctl/config.yaml
-  minimal         Create a minimal ./config.yaml (no admin credentials needed)
-  <filepath>      Create template at a custom filepath`,
+	Long:  strings.TrimRight(initLong, "\n"),
 	Example: `  dbctl init                  # Create ./config.yaml with local template
   dbctl init global           # Create ~/.dbctl/config.yaml with global defaults
   dbctl init minimal          # Create ./config.yaml with minimal zero-admin template

@@ -1,0 +1,6 @@
+Generate a docker-compose.yml from your dbctl config and start all database
+containers. The compose file is auto-generated based on your configured database
+targets (MySQL, PostgreSQL, MongoDB, etc.).
+
+Use --compose to specify a custom compose file instead of auto-generating one.
+Use --generate-only to generate the compose file without starting containers.

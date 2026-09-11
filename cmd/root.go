@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,17 +12,16 @@ import (
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
+//go:embed longdesc/root.txt
+var rootLong string
+
 var cfgFile string
 
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
-	Use:   "dbctl",
-	Short: "Declarative database provisioning & container orchestration",
-	Long: `dbctl is a command-line tool that automates creating databases, configuring
-users, managing passwords, and granting permissions declaratively from YAML files.
-
-Define your desired database state in YAML and let dbctl converge to it
-idempotently — no more brittle shell scripts or manual SQL one-liners.`,
+	Use:           "dbctl",
+	Short:         "Declarative database provisioning & container orchestration",
+	Long:          strings.TrimRight(rootLong, "\n"),
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

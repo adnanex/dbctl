@@ -1,0 +1,5 @@
+Provision databases, users, and permissions as declared in a YAML configuration file.
+
+This is the core command of dbctl. It reads your config.yaml, connects to database
+engines (starting containers if configured), and converges the live state to match
+your declarations — creating databases, users, and grants idempotently.

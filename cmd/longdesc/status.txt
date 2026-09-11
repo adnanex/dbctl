@@ -1,0 +1,2 @@
+Display the status of all configured database targets including container state,
+connection reachability, and configured databases and users.

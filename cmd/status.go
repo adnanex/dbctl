@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -12,11 +14,13 @@ import (
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
+//go:embed longdesc/status.txt
+var statusLong string
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show status of configured database targets",
-	Long: `Display the status of all configured database targets including container state,
-connection reachability, and configured databases and users.`,
+	Long:  strings.TrimRight(statusLong, "\n"),
 	Example: `  dbctl status                 # Table view of all targets
   dbctl status -c config.yaml  # Check specific config`,
 	RunE: runStatus,
