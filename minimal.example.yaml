@@ -1,6 +1,6 @@
 # Minimal Project Configuration
 # Notice: NO admin credentials or host/port needed!
-# They are automatically inherited from ~/.provisioner/config.yaml for the 'mysql' driver.
+# They are automatically inherited from ~/.dbctl/config.yaml for the 'mysql' driver.
 
 driver: mysql
 

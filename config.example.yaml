@@ -1,4 +1,4 @@
-# Example configuration for Database Provisioner
+# Example configuration for dbctl
 targets:
   - driver: mysql
     host: "127.0.0.1"

@@ -258,11 +258,6 @@ func FindGlobalConfigFile(explicitPath string) string {
 			return envPath
 		}
 	}
-	if envPath := os.Getenv("PROVISIONER_GLOBAL_CONFIG"); envPath != "" {
-		if _, err := os.Stat(envPath); err == nil {
-			return envPath
-		}
-	}
 
 	home, err := os.UserHomeDir()
 	if err == nil && home != "" {
@@ -271,10 +266,6 @@ func FindGlobalConfigFile(explicitPath string) string {
 			filepath.Join(home, ".dbctl", "config.yml"),
 			filepath.Join(home, ".config", "dbctl", "config.yaml"),
 			filepath.Join(home, ".config", "dbctl", "config.yml"),
-			filepath.Join(home, ".provisioner", "config.yaml"),
-			filepath.Join(home, ".provisioner", "config.yml"),
-			filepath.Join(home, ".config", "provisioner", "config.yaml"),
-			filepath.Join(home, ".config", "provisioner", "config.yml"),
 		}
 		for _, c := range candidates {
 			if _, err := os.Stat(c); err == nil {

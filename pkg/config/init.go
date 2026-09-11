@@ -27,12 +27,12 @@ func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error
 		return "config.yaml", false, nil
 	case "minimal":
 		return "config.yaml", false, nil
-	case "global", "~", "~/", "~/.dbctl", "~/.provisioner":
+	case "global", "~", "~/", "~/.dbctl":
 		if home == "" {
 			return "", true, fmt.Errorf("unable to determine user home directory")
 		}
 		return filepath.Join(home, ".dbctl", "config.yaml"), true, nil
-	case "config", "~/.config", "config-dir", "~/.config/dbctl", "~/.config/provisioner":
+	case "config", "~/.config", "config-dir", "~/.config/dbctl":
 		if home == "" {
 			return "", true, fmt.Errorf("unable to determine user home directory")
 		}
@@ -44,7 +44,7 @@ func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error
 				trimmed = filepath.Join(home, trimmed[2:])
 			}
 		}
-		isGlobal = strings.Contains(trimmed, ".dbctl") || strings.Contains(trimmed, ".provisioner") || strings.Contains(trimmed, ".config/dbctl") || strings.Contains(trimmed, ".config/provisioner")
+		isGlobal = strings.Contains(trimmed, ".dbctl") || strings.Contains(trimmed, ".config/dbctl")
 		return trimmed, isGlobal, nil
 	}
 }

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Declarative, idempotent database & user provisioner with container orchestration**
+**Declarative, idempotent database & user management with container orchestration**
 
 [![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8.svg?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)

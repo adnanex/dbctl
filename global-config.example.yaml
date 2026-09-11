@@ -1,6 +1,6 @@
-# Global Provisioner Configuration
-# Place this at ~/.provisioner/config.yaml or ~/.config/provisioner/config.yaml
-# Any project running `provisioner` will automatically inherit these defaults
+# Global dbctl Configuration
+# Place this at ~/.dbctl/config.yaml or ~/.config/dbctl/config.yaml
+# Any project running `dbctl` will automatically inherit these defaults
 # for the specified driver, so project repos never need to check in root passwords.
 
 defaults:

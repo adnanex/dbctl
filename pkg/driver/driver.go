@@ -10,7 +10,7 @@ import (
 	"github.com/adnanex/dbctl/pkg/config"
 )
 
-// Driver defines the interface that all database engine provisioners must implement.
+// Driver defines the interface that all database engine drivers must implement.
 type Driver interface {
 	Name() string
 	Connect(ctx context.Context, target *config.TargetConfig) error
