@@ -3,11 +3,11 @@ package driver
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 
 	"github.com/adnanex/dbctl/pkg/config"
+	"github.com/adnanex/dbctl/pkg/ui"
 )
 
 // Driver defines the interface that all database engine drivers must implement.
@@ -67,9 +67,18 @@ func ProvisionTarget(ctx context.Context, target *config.TargetConfig, dryRun bo
 	}
 
 	if dryRun {
-		log.Printf("[%s] DRY-RUN MODE: simulating changes on %s:%d (no changes will be made)...", target.Driver, target.Host, target.Port)
+		ui.Info("DRY-RUN: simulating changes (no modifications will be made)",
+			"driver", target.Driver,
+			"host", target.Host,
+			"port", target.Port,
+		)
 	} else {
-		log.Printf("[%s] Connecting to %s:%d as %s...", target.Driver, target.Host, target.Port, target.Admin.Username)
+		ui.Info("Connecting to database",
+			"driver", target.Driver,
+			"host", target.Host,
+			"port", target.Port,
+			"admin", target.Admin.Username,
+		)
 		if err := drv.Connect(ctx, target); err != nil {
 			return fmt.Errorf("[%s] connection failed: %w", target.Driver, err)
 		}
@@ -79,7 +88,7 @@ func ProvisionTarget(ctx context.Context, target *config.TargetConfig, dryRun bo
 	// 1. Ensure databases
 	for _, db := range target.Databases {
 		if dryRun {
-			log.Printf("[%s] [DRY-RUN] Would ensure database: %s", target.Driver, db.Name)
+			ui.Info("Would ensure database", "driver", target.Driver, "database", db.Name)
 			continue
 		}
 		if err := drv.EnsureDatabase(ctx, db); err != nil {
@@ -90,9 +99,14 @@ func ProvisionTarget(ctx context.Context, target *config.TargetConfig, dryRun bo
 	// 2. Ensure users & grants
 	for _, user := range target.Users {
 		if dryRun {
-			log.Printf("[%s] [DRY-RUN] Would ensure user: %s (host: %s)", target.Driver, user.Username, user.Host)
+			ui.Info("Would ensure user", "driver", target.Driver, "user", user.Username, "host", user.Host)
 			for _, grant := range user.Grants {
-				log.Printf("[%s] [DRY-RUN] Would grant %v on %s to %s", target.Driver, grant.Privileges, grant.Database, user.Username)
+				ui.Info("Would grant privileges",
+					"driver", target.Driver,
+					"privileges", grant.Privileges,
+					"database", grant.Database,
+					"user", user.Username,
+				)
 			}
 			continue
 		}
@@ -108,6 +122,10 @@ func ProvisionTarget(ctx context.Context, target *config.TargetConfig, dryRun bo
 		}
 	}
 
-	log.Printf("[%s] Successfully provisioned all resources on %s:%d", target.Driver, target.Host, target.Port)
+	ui.Info("Successfully provisioned all resources",
+		"driver", target.Driver,
+		"host", target.Host,
+		"port", target.Port,
+	)
 	return nil
 }

@@ -4,11 +4,11 @@
 
 **Declarative, idempotent database & user management with container orchestration**
 
-[![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8.svg?style=flat&logo=go)](https://golang.org)
+[![Go Version](https://img.shields.io/badge/go-1.24+-00ADD8.svg?style=flat&logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-v0.1.0-brightgreen.svg)]()
+[![Release](https://img.shields.io/badge/release-v0.2.0-brightgreen.svg)]()
 
-*MySQL · PostgreSQL · MongoDB*
+*MySQL · PostgreSQL · MongoDB · Redis*
 
 </div>
 
@@ -23,11 +23,15 @@ Instead of writing custom shell scripts or executing brittle `mysql -u root` one
 ### Core Highlights
 
 - **Zero-Admin Project Configs**: Set host defaults once in `~/.dbctl/config.yaml`. Project repositories never need to check in root passwords.
+- **Docker Compose Generation**: Automatically generates `docker-compose.yml` from your config and starts containers with `dbctl up`.
+- **Custom Compose Support**: Bring your own `docker-compose.yml` with `dbctl up --compose ./my-file.yml`.
 - **Container Orchestration**: Automatically starts stopped database services via Docker Compose or standalone `docker run` and polls port readiness before provisioning.
 - **Strict Idempotency**: Safe to run repeatedly in development, test suites, and CI/CD pipelines.
+- **Beautiful Terminal Output**: Powered by [Charmbracelet](https://github.com/charmbracelet) libraries (lipgloss, log, huh) for styled, structured logging.
 - **Template Scaffolding**: Run `dbctl init` to generate templates for global defaults, project configs, or minimal zero-admin setups.
 - **Multi-Driver Engine**: Pluggable drivers for MySQL, PostgreSQL, and MongoDB (MySQL fully implemented out of the box).
 - **Environment Interpolation**: Supports `${VAR}` and `${VAR:-default}` syntax and loads multiple cascading `.env` files.
+- **Shell Completions**: Auto-generated completions for bash, zsh, fish, and PowerShell.
 
 ---
 
@@ -45,7 +49,7 @@ sudo make install
 
 Verify:
 ```bash
-dbctl --help
+dbctl version
 ```
 
 ### 2. Configure Host Defaults (One-Time Setup)
@@ -92,25 +96,80 @@ users:
       - my_app_db
 ```
 
-### 4. Run `dbctl`
+### 4. Start Containers & Provision
 
 ```bash
-dbctl -config config.yaml
+# Option A: Auto-generate Docker Compose + start + provision
+dbctl up
+dbctl provision
+
+# Option B: Use your own Docker Compose file
+dbctl up --compose ./docker-compose.yml
+dbctl provision
 ```
 
 Output:
 ```text
-[dbctl] Loading global configuration from ~/.dbctl/config.yaml...
-[dbctl] Loaded 3 driver default(s) from global config
-[dbctl] Loading configuration from config.yaml...
---- [1/1] Processing mysql on 127.0.0.1:3306 ---
-[dbctl] [container] Docker Compose service "mysql" is already running.
-[dbctl] [container] 127.0.0.1:3306 is reachable and ready!
-[dbctl] [mysql] Connecting to 127.0.0.1:3306 as root...
-[dbctl] [mysql] Successfully created database my_app_db
-[dbctl] [mysql] Successfully created user my_app_user@%
-[dbctl] [mysql] Successfully granted privileges on `my_app_db`.* to my_app_user@%
-[dbctl] Done! Successfully provisioned 1/1 database target(s).
+INFO dbctl: Loading global configuration path=~/.dbctl/config.yaml
+INFO dbctl: Loaded driver defaults from global config count=3
+INFO dbctl: Loading project configuration path=config.yaml
+
+── [1/1]  mysql  on 127.0.0.1:3306
+INFO dbctl: Connecting to database driver=mysql host=127.0.0.1 port=3306 admin=root
+INFO dbctl: Database created driver=mysql database=my_app_db charset=utf8mb4
+INFO dbctl: User created driver=mysql user=my_app_user host=%
+INFO dbctl: Privileges granted driver=mysql target=`my_app_db`.* user=my_app_user
+INFO dbctl: Successfully provisioned all resources driver=mysql host=127.0.0.1 port=3306
+
+INFO dbctl: ✓ Successfully provisioned 1/1 database target(s)
+```
+
+---
+
+## CLI Reference
+
+### Commands
+
+| Command | Description |
+| :--- | :--- |
+| `dbctl provision` | Provision databases, users, and permissions from config |
+| `dbctl up` | Generate Docker Compose and start database containers |
+| `dbctl down` | Stop database containers |
+| `dbctl init [dest]` | Scaffold configuration file (`global`, `minimal`, `local`, `<path>`) |
+| `dbctl status` | Show status of configured database targets |
+| `dbctl version` | Print version, commit, build date, and Go info |
+| `dbctl completion` | Generate shell completion scripts (bash/zsh/fish/powershell) |
+
+### Global Flags
+
+| Flag | Shorthand | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--config <path>` | `-c` | `config.yaml` | Path to YAML configuration file |
+| `--global-config <path>` | — | Auto-detected | Path to global host configuration (`~/.dbctl/config.yaml`) |
+| `--env <path>` | `-e` | — | Path to `.env` file (can be repeated) |
+| `--skip-container` | — | `false` | Skip automatic container checking and startup |
+| `--dry-run` | — | `false` | Simulate execution without making database modifications |
+| `--timeout <duration>` | `-t` | `60s` | Overall timeout for provisioning operations |
+| `--verbose` | `-v` | `false` | Enable verbose debug output |
+| `--quiet` | `-q` | `false` | Suppress all output except errors |
+
+### Docker Compose Commands
+
+```bash
+# Generate compose file from config and start containers
+dbctl up
+
+# Generate without starting
+dbctl up --generate-only
+
+# Use a custom compose file
+dbctl up --compose ./my-docker-compose.yml
+
+# Stop containers
+dbctl down
+
+# Stop and remove data volumes
+dbctl down --volumes
 ```
 
 ---
@@ -122,22 +181,19 @@ Detailed documentation is available in the [`docs/`](docs/) directory:
 - [Architecture & Overview](docs/overview.md)
 - [Getting Started Guide](docs/getting-started.md)
 - [Configuration Reference](docs/configuration.md)
+- [Docker Compose Guide](docs/compose.md)
 - [Supported Database Engines](docs/engines.md)
 - [Future Roadmap & Planned Features](docs/roadmap.md)
 
 ---
 
-## CLI Flags
+## Technology Stack
 
-| Flag | Shorthand | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `init [dest]` | — | — | Scaffold configuration file (`global`, `config`, `local`, `minimal`, `<path>`) |
-| `-config <path>` | `-c` | `config.yaml` | Path to YAML configuration file |
-| `-global-config <path>` | `-g` | Auto-detected | Path to global host configuration (`~/.dbctl/config.yaml`) |
-| `-env <path>` | `-e` | — | Path to `.env` file (can be repeated or comma-separated) |
-| `-skip-container` | — | `false` | Skip automatic container checking and startup |
-| `-dry-run` | — | `false` | Simulate execution without making database modifications |
-| `-timeout <duration>` | — | `60s` | Overall timeout for provisioning operations |
+- **CLI Framework**: [Cobra](https://github.com/spf13/cobra) — subcommands, flags, completions, help generation
+- **Configuration**: [Viper](https://github.com/spf13/viper) — YAML/env/flag merging and auto-discovery
+- **Terminal Styling**: [Lipgloss](https://github.com/charmbracelet/lipgloss) — beautiful styled terminal output
+- **Structured Logging**: [Charmbracelet Log](https://github.com/charmbracelet/log) — colored, structured logging
+- **Spinners & Progress**: [Huh Spinner](https://github.com/charmbracelet/huh) — elegant loading indicators
 
 ---
 

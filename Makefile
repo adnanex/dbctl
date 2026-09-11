@@ -4,6 +4,10 @@ INSTALL_DIR ?= /usr/local/bin
 BIN_NAME ?= dbctl
 CONFIG ?= config.yaml
 ENV ?=
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
+BUILD_DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+LDFLAGS := -ldflags "-X github.com/adnanex/dbctl/cmd.Version=$(VERSION) -X github.com/adnanex/dbctl/cmd.Commit=$(COMMIT) -X github.com/adnanex/dbctl/cmd.BuildDate=$(BUILD_DATE)"
 
 .PHONY: help build install uninstall run dry-run clean test
 
@@ -15,8 +19,8 @@ help: ## Show this help message
 
 build: ## Build dbctl binary into bin/
 	@mkdir -p bin
-	@go build -o bin/$(BIN_NAME) main.go
-	@echo "Built bin/$(BIN_NAME)"
+	@go build $(LDFLAGS) -o bin/$(BIN_NAME) main.go
+	@echo "Built bin/$(BIN_NAME) ($(VERSION))"
 
 install: build ## Install dbctl to INSTALL_DIR (default: /usr/local/bin, or pass INSTALL_DIR=~/.local/bin)
 	@mkdir -p $(INSTALL_DIR)
@@ -27,22 +31,22 @@ uninstall: ## Remove dbctl from INSTALL_DIR
 	@rm -f $(INSTALL_DIR)/$(BIN_NAME)
 	@echo "Removed $(INSTALL_DIR)/$(BIN_NAME)"
 
-run: ## Run dbctl against config.yaml (optional: make run CONFIG=my-config.yaml ENV="-env .env")
+run: ## Run dbctl provision against config.yaml (optional: make run CONFIG=my-config.yaml ENV="-e .env")
 	@if [ -x "$(INSTALL_DIR)/$(BIN_NAME)" ]; then \
-		"$(INSTALL_DIR)/$(BIN_NAME)" -config $(CONFIG) $(ENV); \
+		"$(INSTALL_DIR)/$(BIN_NAME)" provision -c $(CONFIG) $(ENV); \
 	elif [ -x "./bin/$(BIN_NAME)" ]; then \
-		"./bin/$(BIN_NAME)" -config $(CONFIG) $(ENV); \
+		"./bin/$(BIN_NAME)" provision -c $(CONFIG) $(ENV); \
 	else \
-		go run main.go -config $(CONFIG) $(ENV); \
+		go run $(LDFLAGS) main.go provision -c $(CONFIG) $(ENV); \
 	fi
 
 dry-run: ## Simulate execution without modifying databases
 	@if [ -x "$(INSTALL_DIR)/$(BIN_NAME)" ]; then \
-		"$(INSTALL_DIR)/$(BIN_NAME)" -dry-run -config $(CONFIG) $(ENV); \
+		"$(INSTALL_DIR)/$(BIN_NAME)" provision --dry-run -c $(CONFIG) $(ENV); \
 	elif [ -x "./bin/$(BIN_NAME)" ]; then \
-		"./bin/$(BIN_NAME)" -dry-run -config $(CONFIG) $(ENV); \
+		"./bin/$(BIN_NAME)" provision --dry-run -c $(CONFIG) $(ENV); \
 	else \
-		go run main.go -dry-run -config $(CONFIG) $(ENV); \
+		go run $(LDFLAGS) main.go provision --dry-run -c $(CONFIG) $(ENV); \
 	fi
 
 test: ## Run test suite

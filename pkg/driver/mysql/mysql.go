@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+
 	"github.com/adnanex/dbctl/pkg/config"
 	"github.com/adnanex/dbctl/pkg/driver"
+	"github.com/adnanex/dbctl/pkg/ui"
 )
 
 func init() {
@@ -95,7 +96,7 @@ func (m *MySQLDriver) EnsureDatabase(ctx context.Context, dbSpec config.Database
 	}
 
 	if err == sql.ErrNoRows {
-		log.Printf("[mysql] Database %s does not exist. Creating...", dbSpec.Name)
+		ui.Info("Creating database", "driver", "mysql", "database", dbSpec.Name, "charset", charset)
 		createQuery := fmt.Sprintf("CREATE DATABASE %s CHARACTER SET %s COLLATE %s",
 			escapeIdentifier(dbSpec.Name),
 			charset,
@@ -104,9 +105,9 @@ func (m *MySQLDriver) EnsureDatabase(ctx context.Context, dbSpec config.Database
 		if _, err := m.db.ExecContext(ctx, createQuery); err != nil {
 			return fmt.Errorf("failed to create database %s: %w", dbSpec.Name, err)
 		}
-		log.Printf("[mysql] Successfully created database %s", dbSpec.Name)
+		ui.Info("Database created", "driver", "mysql", "database", dbSpec.Name)
 	} else {
-		log.Printf("[mysql] Database %s already exists. Skipping creation.", dbSpec.Name)
+		ui.Debug("Database already exists, skipping", "driver", "mysql", "database", dbSpec.Name)
 	}
 
 	return nil
@@ -131,7 +132,7 @@ func (m *MySQLDriver) EnsureUser(ctx context.Context, userSpec config.UserConfig
 	passLiteral := escapeLiteral(userSpec.Password)
 
 	if err == sql.ErrNoRows {
-		log.Printf("[mysql] User %s@%s does not exist. Creating...", userSpec.Username, host)
+		ui.Info("Creating user", "driver", "mysql", "user", userSpec.Username, "host", host)
 		createQuery := fmt.Sprintf("CREATE USER %s@%s IDENTIFIED BY %s",
 			userLiteral,
 			hostLiteral,
@@ -140,9 +141,9 @@ func (m *MySQLDriver) EnsureUser(ctx context.Context, userSpec config.UserConfig
 		if _, err := m.db.ExecContext(ctx, createQuery); err != nil {
 			return fmt.Errorf("failed to create user %s@%s: %w", userSpec.Username, host, err)
 		}
-		log.Printf("[mysql] Successfully created user %s@%s", userSpec.Username, host)
+		ui.Info("User created", "driver", "mysql", "user", userSpec.Username, "host", host)
 	} else {
-		log.Printf("[mysql] User %s@%s already exists. Synchronizing password...", userSpec.Username, host)
+		ui.Debug("User exists, synchronizing password", "driver", "mysql", "user", userSpec.Username, "host", host)
 		alterQuery := fmt.Sprintf("ALTER USER %s@%s IDENTIFIED BY %s",
 			userLiteral,
 			hostLiteral,
@@ -151,7 +152,7 @@ func (m *MySQLDriver) EnsureUser(ctx context.Context, userSpec config.UserConfig
 		if _, err := m.db.ExecContext(ctx, alterQuery); err != nil {
 			return fmt.Errorf("failed to alter user %s@%s: %w", userSpec.Username, host, err)
 		}
-		log.Printf("[mysql] Successfully verified/updated user %s@%s", userSpec.Username, host)
+		ui.Debug("User password synchronized", "driver", "mysql", "user", userSpec.Username, "host", host)
 	}
 
 	return nil
@@ -183,7 +184,13 @@ func (m *MySQLDriver) EnsureGrant(ctx context.Context, userSpec config.UserConfi
 		escapeLiteral(host),
 	)
 
-	log.Printf("[mysql] Granting [%s] on %s to %s@%s...", privs, targetResource, userSpec.Username, host)
+	ui.Info("Granting privileges",
+		"driver", "mysql",
+		"privileges", privs,
+		"target", targetResource,
+		"user", userSpec.Username,
+		"host", host,
+	)
 	if _, err := m.db.ExecContext(ctx, grantQuery); err != nil {
 		return fmt.Errorf("failed to execute grant query (%s): %w", grantQuery, err)
 	}
@@ -192,6 +199,10 @@ func (m *MySQLDriver) EnsureGrant(ctx context.Context, userSpec config.UserConfi
 		return fmt.Errorf("failed to flush privileges: %w", err)
 	}
 
-	log.Printf("[mysql] Successfully granted privileges on %s to %s@%s", targetResource, userSpec.Username, host)
+	ui.Info("Privileges granted",
+		"driver", "mysql",
+		"target", targetResource,
+		"user", userSpec.Username,
+	)
 	return nil
 }

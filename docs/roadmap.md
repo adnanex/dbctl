@@ -1,12 +1,43 @@
-# Future Roadmap & Feature Ideas - dbctl
+# Future Roadmap & Feature Ideas — dbctl
 
 This document outlines planned improvements, architectural extensions, and potential features to expand `dbctl` into a comprehensive developer database control suite.
 
 ---
 
-## 1. Schema Migrations & Raw SQL Seeders (`dbctl migrate`)
+## ✅ Completed (v0.2.0)
 
-### Feature Overview
+### Cobra + Viper CLI Framework
+Migrated from stdlib `flag` to `spf13/cobra` and `spf13/viper`:
+- Nested subcommands (`dbctl provision`, `dbctl init`, `dbctl up`, `dbctl down`, `dbctl status`, `dbctl version`)
+- Auto-generated `--help`, shell completions (bash/zsh/fish/powershell)
+- Persistent flags inherited by child commands (`--config`, `--env`, `--timeout`, `--dry-run`, `--verbose`, `--quiet`)
+- Backward compatible: bare `dbctl` still works as `dbctl provision`
+
+### Charmbracelet Terminal UI
+Beautiful terminal output using:
+- **lipgloss** — styled headers, badges, status icons
+- **charmbracelet/log** — structured key-value logging replacing `log.Printf`
+- **huh/spinner** — loading spinners during container startup
+
+### Docker Compose Generation (`dbctl up`)
+- Auto-generates `docker-compose.dbctl.yml` from config targets
+- Supports MySQL, PostgreSQL, MongoDB, Redis with healthchecks
+- `--compose` flag for custom compose files
+- `--generate-only` to preview without starting
+
+### Docker Compose Lifecycle (`dbctl down`)
+- Stop containers from generated or detected compose files
+- `--volumes` flag to remove data volumes
+
+### Status Dashboard (`dbctl status`)
+- Table view of all configured targets with container state
+
+---
+
+## Planned Features
+
+### 1. Schema Migrations & Raw SQL Seeders (`dbctl migrate`)
+
 After creating a database and user, applications usually need initial schema tables and seeds.
 `dbctl` can execute schema files and raw SQL scripts directly:
 
@@ -27,9 +58,8 @@ databases:
 
 ---
 
-## 2. Instant Database Snapshots & Fast Reset (`dbctl snapshot`)
+### 2. Instant Database Snapshots & Fast Reset (`dbctl snapshot`)
 
-### Feature Overview
 When testing locally or writing end-to-end tests, developers often corrupt local data and want to reset back to a clean state instantly without re-creating all tables.
 
 ```bash
@@ -48,9 +78,8 @@ dbctl snapshot list
 
 ---
 
-## 3. Secret Store Integrations
+### 3. Secret Store Integrations
 
-### Feature Overview
 Instead of reading credentials from plain `.env` files or hardcoded YAML, allow `dbctl` to pull secrets dynamically from modern secret managers:
 
 ```yaml
@@ -70,9 +99,8 @@ admin:
 
 ---
 
-## 4. Drift Detection (`dbctl diff`)
+### 4. Drift Detection (`dbctl diff`)
 
-### Feature Overview
 Check if the real database has drifted from what is declared in `config.yaml` without changing anything:
 
 ```bash
@@ -90,9 +118,8 @@ dbctl diff -c config.yaml
 
 ---
 
-## 5. Interactive Terminal UI (TUI) Dashboard (`dbctl ui`)
+### 5. Interactive TUI Dashboard (`dbctl ui`)
 
-### Feature Overview
 A lightweight, terminal-based dashboard built with `bubbletea` / `lipgloss` showing:
 - Real-time container health and port bindings.
 - List of databases and their disk sizes.
@@ -101,9 +128,88 @@ A lightweight, terminal-based dashboard built with `bubbletea` / `lipgloss` show
 
 ---
 
-## 6. Cloud Provider & Remote Cluster Provisioning
+### 6. Quick Connect (`dbctl connect`)
 
-### Feature Overview
+Open a database client session connected to your configured instances:
+
+```bash
+dbctl connect mysql             # Opens mysql CLI
+dbctl connect postgres          # Opens psql
+dbctl connect mongo             # Opens mongosh
+dbctl connect --url mysql       # Print connection URL only
+```
+
+---
+
+### 7. Export Connection Strings (`dbctl export`)
+
+Output ready-to-use connection strings for application configuration:
+
+```bash
+# Print connection URL
+dbctl export url mysql
+# Output: mysql://app_user:my_secret_pass@127.0.0.1:3306/my_app_db?charset=utf8mb4
+
+# Export as environment variables
+dbctl export env
+# Output: export DATABASE_URL=mysql://...
+
+# Export to .env file
+dbctl export dotenv
+
+# JSON format for programmatic use
+dbctl export json
+```
+
+---
+
+### 8. Database Reset (`dbctl reset`)
+
+Drop all databases and users, then re-provision from scratch:
+
+```bash
+dbctl reset                     # Interactive confirmation required
+dbctl reset --confirm           # Skip confirmation
+dbctl reset my_app_db           # Reset specific database only
+```
+
+---
+
+### 9. Health Checks (`dbctl health`)
+
+Continuously monitor database connection health:
+
+```bash
+dbctl health                    # One-shot health check
+dbctl health --watch            # Continuous monitoring (bubbletea TUI)
+dbctl health --json             # Machine-readable output for CI
+```
+
+---
+
+### 10. Profile System
+
+Define multiple environments in a single config:
+
+```yaml
+profiles:
+  dev:
+    targets: [...]
+  test:
+    targets: [...]
+  staging:
+    targets: [...]
+```
+
+```bash
+dbctl provision --profile test
+dbctl up --profile staging
+```
+
+---
+
+### 11. Cloud Provider & Remote Cluster Provisioning
+
 Extend `dbctl` beyond local Docker to provision databases and users on cloud services:
 - **DigitalOcean Managed Databases**: API-driven database and user creation.
 - **AWS RDS / Aurora**: Provisioning via IAM or Master user credentials.
@@ -111,9 +217,8 @@ Extend `dbctl` beyond local Docker to provision databases and users on cloud ser
 
 ---
 
-## 7. GitHub Action & CI/CD Native Runners
+### 12. GitHub Action & CI/CD Native Runners
 
-### Feature Overview
 Provide a pre-built GitHub Action for CI/CD pipelines:
 
 ```yaml
@@ -126,19 +231,16 @@ Provide a pre-built GitHub Action for CI/CD pipelines:
 
 ---
 
-## 8. Export Connection Strings (`dbctl export` / `dbctl env`)
+### 13. Additional Database Engines
 
-### Feature Overview
-Quickly output ready-to-use connection strings for application configuration or `.env` files:
-
-```bash
-# Print connection string for app_user
-dbctl url my_app_db --user app_user
-# Output: mysql://app_user:my_secret_pass@127.0.0.1:3306/my_app_db?charset=utf8mb4
-
-# Export to current shell or .env
-eval $(dbctl env --user app_user)
-```
+| Engine | Priority | Notes |
+| :--- | :--- | :--- |
+| **Redis** | High | Key-value store, ubiquitous in dev stacks |
+| **ClickHouse** | Medium | Analytics, growing fast |
+| **CockroachDB** | Medium | Distributed SQL, PostgreSQL-compatible wire protocol |
+| **MariaDB** | Low | Can share MySQL driver with minor tweaks |
+| **SQLite** | Low | No container needed, file-based |
+| **Valkey** | Low | Redis fork, same protocol |
 
 ---
 
@@ -148,8 +250,14 @@ eval $(dbctl env --user app_user)
 | :--- | :--- | :--- | :--- |
 | **P1** | Complete PostgreSQL & MongoDB Driver Implementations | Medium | High |
 | **P1** | Database Schema / SQL Seeders (`schema:` & `seed:`) | Low | High |
-| **P2** | Connection URL Generator (`dbctl url`) | Low | Medium |
+| **P1** | Quick Connect (`dbctl connect`) | Low | Medium |
+| **P2** | Connection URL Generator (`dbctl export`) | Low | Medium |
 | **P2** | Instant Snapshots & Restore (`dbctl snapshot`) | Medium | High |
+| **P2** | Health Checks (`dbctl health`) | Low | Medium |
+| **P2** | Database Reset (`dbctl reset`) | Low | Medium |
 | **P3** | Secret Store Integrations (Vault, 1Password, AWS) | Medium | Medium |
 | **P3** | Drift Detection (`dbctl diff`) | High | High |
-| **P4** | Interactive Terminal UI (TUI) | Medium | Delight |
+| **P3** | Profile System | Medium | Medium |
+| **P4** | Interactive TUI Dashboard (`dbctl ui`) | Medium | Delight |
+| **P4** | Cloud Provider Provisioning | High | High |
+| **P4** | GitHub Action | Medium | Medium |

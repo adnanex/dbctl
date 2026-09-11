@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/adnanex/dbctl/pkg/config"
+	"github.com/adnanex/dbctl/pkg/ui"
 )
 
 // EnsureContainerRunning starts the container (via Compose or Docker run) if not already active
@@ -79,11 +79,11 @@ func ensureComposeService(ctx context.Context, dockerPath string, cfg *config.Co
 	out, _ := cmd.CombinedOutput()
 
 	if strings.Contains(string(out), service) {
-		log.Printf("[container] Docker Compose service %q is already running.", service)
+		ui.Info("Compose service already running", "service", service)
 		return nil
 	}
 
-	log.Printf("[container] Starting Docker Compose service %q (file: %s)...", service, composeFile)
+	ui.Info("Starting Compose service", "service", service, "file", composeFile)
 	upArgs := append(args, "up", "-d", service)
 	upCmd := exec.CommandContext(ctx, dockerPath, upArgs...)
 	upCmd.Stdout = os.Stdout
@@ -92,7 +92,7 @@ func ensureComposeService(ctx context.Context, dockerPath string, cfg *config.Co
 		return fmt.Errorf("failed to start compose service %q: %w", service, err)
 	}
 
-	log.Printf("[container] Started Docker Compose service %q", service)
+	ui.Info("Compose service started", "service", service)
 	return nil
 }
 
@@ -111,10 +111,10 @@ func ensureStandaloneContainer(ctx context.Context, dockerPath string, cfg *conf
 
 	if err == nil {
 		if status == "running" {
-			log.Printf("[container] Container %q is already running.", name)
+			ui.Info("Container already running", "name", name)
 			return nil
 		}
-		log.Printf("[container] Container %q exists with status %q. Starting...", name, status)
+		ui.Info("Starting existing container", "name", name, "status", status)
 		startCmd := exec.CommandContext(ctx, dockerPath, "start", name)
 		startCmd.Stdout = os.Stdout
 		startCmd.Stderr = os.Stderr
@@ -122,7 +122,7 @@ func ensureStandaloneContainer(ctx context.Context, dockerPath string, cfg *conf
 	}
 
 	// Container doesn't exist, create and run
-	log.Printf("[container] Creating and starting container %q from image %q...", name, cfg.Image)
+	ui.Info("Creating container", "name", name, "image", cfg.Image)
 	runArgs := []string{"run", "-d", "--name", name}
 
 	if cfg.AutoRemove {
@@ -160,13 +160,13 @@ func ensureStandaloneContainer(ctx context.Context, dockerPath string, cfg *conf
 		return fmt.Errorf("failed to run container %q: %w", name, err)
 	}
 
-	log.Printf("[container] Successfully created and started container %q", name)
+	ui.Info("Container created and started", "name", name)
 	return nil
 }
 
 func waitForPort(ctx context.Context, host string, port int, timeout time.Duration) error {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	log.Printf("[container] Waiting for %s to become ready (timeout: %s)...", addr, timeout)
+	ui.Info("Waiting for port readiness", "addr", addr, "timeout", timeout)
 
 	deadline := time.Now().Add(timeout)
 	for {
@@ -185,7 +185,7 @@ func waitForPort(ctx context.Context, host string, port int, timeout time.Durati
 			conn.Close()
 			// Short stabilization pause for DB engine handshake
 			time.Sleep(1 * time.Second)
-			log.Printf("[container] %s is reachable and ready!", addr)
+			ui.Info("Port is reachable and ready", "addr", addr)
 			return nil
 		}
 
