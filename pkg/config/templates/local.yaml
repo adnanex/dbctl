@@ -1,0 +1,27 @@
+# Database Configuration (Project-Level) - dbctl
+# If global defaults are configured in ~/.dbctl/config.yaml,
+# you can omit 'admin' credentials and connection settings.
+
+targets:
+  - driver: mysql
+    host: "${MYSQL_HOST:-127.0.0.1}"
+    port: 3306
+    admin:
+      username: root
+      password: "${MYSQL_ROOT_PASSWORD:-rootpassword}"
+
+    # Databases to ensure exist
+    databases:
+      - name: my_app_db
+        charset: utf8mb4
+        collation: utf8mb4_unicode_ci
+
+    # Users to ensure exist and their database access permissions
+    users:
+      - username: app_user
+        password: "${APP_USER_PASSWORD:-secret_password_123}"
+        host: "%"
+        grants:
+          - database: my_app_db
+            privileges:
+              - "ALL PRIVILEGES"

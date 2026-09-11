@@ -1,0 +1,67 @@
+version: '3'
+
+vars:
+  BIN_NAME: dbctl
+  INSTALL_DIR: '{{.INSTALL_DIR | default "/usr/local/bin"}}'
+  CONFIG: '{{.CONFIG | default "config.yaml"}}'
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build dbctl binary into bin/
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/{{.BIN_NAME}} main.go
+      - echo "Built bin/{{.BIN_NAME}}"
+
+  install:
+    desc: Install dbctl binary to INSTALL_DIR (default /usr/local/bin)
+    deps: [build]
+    cmds:
+      - mkdir -p {{.INSTALL_DIR}}
+      - install -m 755 bin/{{.BIN_NAME}} {{.INSTALL_DIR}}/{{.BIN_NAME}}
+      - echo "Installed {{.BIN_NAME}} to {{.INSTALL_DIR}}/{{.BIN_NAME}}"
+
+  uninstall:
+    desc: Remove dbctl binary from INSTALL_DIR
+    cmds:
+      - rm -f {{.INSTALL_DIR}}/{{.BIN_NAME}}
+      - echo "Removed {{.INSTALL_DIR}}/{{.BIN_NAME}}"
+
+  run:
+    desc: Run dbctl with config.yaml
+    cmds:
+      - |
+        if [ -x "{{.INSTALL_DIR}}/{{.BIN_NAME}}" ]; then
+          "{{.INSTALL_DIR}}/{{.BIN_NAME}}" -config {{.CONFIG}} {{.CLI_ARGS}}
+        elif [ -x "./bin/{{.BIN_NAME}}" ]; then
+          "./bin/{{.BIN_NAME}}" -config {{.CONFIG}} {{.CLI_ARGS}}
+        else
+          go run main.go -config {{.CONFIG}} {{.CLI_ARGS}}
+        fi
+
+  dry-run:
+    desc: Run dbctl in dry-run mode (simulation only)
+    cmds:
+      - |
+        if [ -x "{{.INSTALL_DIR}}/{{.BIN_NAME}}" ]; then
+          "{{.INSTALL_DIR}}/{{.BIN_NAME}}" -dry-run -config {{.CONFIG}} {{.CLI_ARGS}}
+        elif [ -x "./bin/{{.BIN_NAME}}" ]; then
+          "./bin/{{.BIN_NAME}}" -dry-run -config {{.CONFIG}} {{.CLI_ARGS}}
+        else
+          go run main.go -dry-run -config {{.CONFIG}} {{.CLI_ARGS}}
+        fi
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin

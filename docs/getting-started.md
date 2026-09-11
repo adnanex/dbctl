@@ -1,0 +1,105 @@
+# Getting Started with dbctl
+
+Get up and running with `dbctl` in less than two minutes.
+
+---
+
+## 1. Installation
+
+### From Source
+```bash
+git clone https://github.com/adnanex/dbctl.git
+cd dbctl
+make build
+```
+
+### Install to System (Global for All Users)
+```bash
+sudo make install
+# Installs binary to /usr/local/bin/dbctl
+```
+
+### Install for Current User Only
+```bash
+make install INSTALL_DIR=$HOME/.local/bin
+# (Ensure ~/.local/bin is in your $PATH)
+```
+
+Verify installation:
+```bash
+dbctl --help
+```
+
+---
+
+## 2. Initial Setup
+
+### Step A: Initialize Global Host Defaults (Recommended)
+Set up your machine's default database credentials once:
+
+```bash
+dbctl init global
+```
+
+This creates `~/.dbctl/config.yaml` pre-configured with default credentials and connection settings for MySQL, PostgreSQL, and MongoDB:
+
+```yaml
+# ~/.dbctl/config.yaml
+defaults:
+  mysql:
+    host: "127.0.0.1"
+    port: 3306
+    admin:
+      username: "root"
+      password: "${MYSQL_ROOT_PASSWORD:-rootpassword}"
+```
+
+### Step B: Initialize a Project
+In any project repository, run:
+
+```bash
+# Generate minimal zero-admin config:
+dbctl init minimal
+```
+
+This creates a clean `./config.yaml`:
+
+```yaml
+driver: mysql
+
+databases:
+  - name: my_project_db
+
+users:
+  - username: project_user
+    password: my_secret_password_123
+    databases:
+      - my_project_db
+```
+
+---
+
+## 3. Running `dbctl`
+
+### Standard Run
+```bash
+dbctl -config config.yaml
+# Or shorthand:
+dbctl -c config.yaml
+```
+
+### Dry-Run Mode (Simulation)
+Inspect what `dbctl` would do without making changes to the database:
+```bash
+dbctl -dry-run -c config.yaml
+```
+
+### Passing Environment Files
+Load runtime variables dynamically:
+```bash
+dbctl -env .env.mysql -c config.yaml
+```
+You can pass multiple files; later files take precedence:
+```bash
+dbctl -env .env.mysql -e .env.secrets -c config.yaml
+```

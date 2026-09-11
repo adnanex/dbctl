@@ -1,0 +1,14 @@
+# Minimal Project Configuration
+# Notice: NO admin credentials or host/port needed!
+# They are automatically inherited from ~/.provisioner/config.yaml for the 'mysql' driver.
+
+driver: mysql
+
+databases:
+  - name: my_awesome_app
+
+users:
+  - username: awesome_user
+    password: my_secret_app_password
+    databases:
+      - my_awesome_app

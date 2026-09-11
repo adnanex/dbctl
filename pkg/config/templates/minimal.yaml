@@ -1,0 +1,13 @@
+# Minimal Project Configuration (dbctl)
+# Connection settings and admin credentials are automatically inherited from ~/.dbctl/config.yaml
+
+driver: mysql
+
+databases:
+  - name: my_app_db
+
+users:
+  - username: app_user
+    password: "${APP_USER_PASSWORD:-secret_password_123}"
+    databases:
+      - my_app_db

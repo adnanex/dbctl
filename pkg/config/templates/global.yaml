@@ -1,0 +1,39 @@
+# Global Database Provisioner Configuration (dbctl)
+# Default locations: ~/.dbctl/config.yaml or ~/.config/dbctl/config.yaml
+# Projects in this host can omit admin credentials and inherit these defaults.
+
+defaults:
+  mysql:
+    host: "${MYSQL_HOST:-127.0.0.1}"
+    port: 3306
+    admin:
+      username: root
+      password: "${MYSQL_ROOT_PASSWORD:-rootpassword}"
+    container:
+      compose_file: "${DOCKER_COMPOSE_FILE:-}"
+      service: "mysql"
+      # Standalone docker options (if not using docker-compose):
+      # image: "mysql:8.0-debian"
+      # name: "dbs-mysql"
+
+  postgres:
+    host: "${POSTGRES_HOST:-127.0.0.1}"
+    port: 5432
+    admin:
+      username: root
+      password: "${POSTGRES_PASSWORD:-rootpassword}"
+      database: postgres
+    container:
+      compose_file: "${DOCKER_COMPOSE_FILE:-}"
+      service: "postgres"
+
+  mongodb:
+    host: "${MONGO_HOST:-127.0.0.1}"
+    port: 27017
+    admin:
+      username: root
+      password: "${MONGO_INITDB_ROOT_PASSWORD:-rootpassword}"
+      auth_source: admin
+    container:
+      compose_file: "${DOCKER_COMPOSE_FILE:-}"
+      service: "mongo"

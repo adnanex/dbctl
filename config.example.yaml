@@ -1,0 +1,28 @@
+# Example configuration for Database Provisioner
+targets:
+  - driver: mysql
+    host: "127.0.0.1"
+    port: 3306
+    admin:
+      username: root
+      password: rootpassword
+
+    databases:
+      - name: production_db
+        charset: utf8mb4
+        collation: utf8mb4_unicode_ci
+      - name: analytics_db
+
+    users:
+      - username: app_service
+        password: secure_service_password_123
+        host: "%"
+        grants:
+          - database: production_db
+            privileges:
+              - "ALL PRIVILEGES"
+          - database: analytics_db
+            privileges:
+              - "SELECT"
+              - "INSERT"
+              - "UPDATE"
