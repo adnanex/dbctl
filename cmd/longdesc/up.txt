@@ -1,6 +1,13 @@
-Generate a docker-compose.yml from your dbctl config and start all database
+Generate a docker-compose.yml from your dbctl config and start your database
 containers. The compose file is auto-generated based on your configured database
 targets (MySQL, PostgreSQL, MongoDB, etc.).
+
+Pass one or more driver names (e.g. "dbctl up mysql") to start only those
+targets instead of every target in your config. This also applies when a
+custom or auto-discovered compose file is used (DBCTL_COMPOSE_FILE, DBCTL_STACK,
+./.dbctl/dbs, ~/.dbctl/dbs, ...): even with no driver filter, only the services
+your project's own config actually wires up are started — not every service in
+a shared, multi-engine stack file.
 
 Use --compose to specify a custom compose file instead of auto-generating one.
 Use --generate-only to generate the compose file without starting containers.

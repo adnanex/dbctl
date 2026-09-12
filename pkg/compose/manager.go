@@ -4,20 +4,29 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
-// Up runs docker compose up -d with the given compose file.
-func Up(composeFile string) error {
+// Up runs docker compose up -d with the given compose file. If services is
+// non-empty, only those services are started (and recreated/depended-on as
+// needed by Compose); otherwise every service in the file is started.
+func Up(composeFile string, services ...string) error {
 	dockerPath, err := exec.LookPath("docker")
 	if err != nil {
 		return fmt.Errorf("docker executable not found in PATH: %w", err)
 	}
 
-	ui.Info("Running docker compose up", "file", composeFile)
+	if len(services) > 0 {
+		ui.Info("Running docker compose up", "file", composeFile, "services", strings.Join(services, ", "))
+	} else {
+		ui.Info("Running docker compose up", "file", composeFile)
+	}
 
-	cmd := exec.Command(dockerPath, "compose", "-f", composeFile, "up", "-d")
+	args := []string{"compose", "-f", composeFile, "up", "-d"}
+	args = append(args, services...)
+	cmd := exec.Command(dockerPath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

@@ -21,13 +21,16 @@ var upLong string
 var downLong string
 
 var upCmd = &cobra.Command{
-	Use:   "up",
+	Use:   "up [driver...]",
 	Short: "Generate Docker Compose and start database containers",
 	Long:  strings.TrimRight(upLong, "\n"),
-	Example: `  dbctl up                          # Generate compose + start containers
+	Example: `  dbctl up                          # Start every target in your config
+  dbctl up mysql                    # Start only the mysql target
+  dbctl up mysql mongodb            # Start only these targets
   dbctl up --generate-only          # Just generate docker-compose.dbctl.yml
   dbctl up --compose ./my-compose.yml  # Use custom compose file
   dbctl up --detach                 # Run in background (default)`,
+	Args: cobra.ArbitraryArgs,
 	RunE: runUp,
 }
 
@@ -57,6 +60,8 @@ func runUp(cmd *cobra.Command, args []string) error {
 	customCompose, _ := cmd.Flags().GetString("compose")
 	output, _ := cmd.Flags().GetString("output")
 
+	driverFilter := normalizeDriverFilter(args)
+
 	// If no explicit --compose flag was given, check whether a host/project stack
 	// (DBCTL_COMPOSE_FILE, DBCTL_STACK, ~/.dbctl/dbs, ./dbs, ...) already exists
 	// before falling back to generating a fresh compose file from config.
@@ -68,14 +73,23 @@ func runUp(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// If using custom (or discovered) compose file, just run it
+	// If using a custom (or discovered) compose file, only start the services
+	// this project's own config actually needs — a discovered file is often a
+	// shared, multi-engine stack, and this project may only use one of them —
+	// narrowed further by an explicit driver filter, if given.
 	if customCompose != "" {
 		if _, err := os.Stat(customCompose); os.IsNotExist(err) {
 			return fmt.Errorf("compose file not found: %s", customCompose)
 		}
+
+		services, err := resolveComposeServices(driverFilter)
+		if err != nil {
+			return err
+		}
+
 		ui.Info("Using compose file", "path", customCompose)
 		if !generateOnly {
-			return compose.Up(customCompose)
+			return compose.Up(customCompose, services...)
 		}
 		return nil
 	}
@@ -103,6 +117,14 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	if len(cfg.Targets) == 0 {
 		return fmt.Errorf("no target databases defined in %s", configFile)
+	}
+
+	if len(driverFilter) > 0 {
+		filtered, err := filterTargetsByDriver(cfg.Targets, driverFilter)
+		if err != nil {
+			return fmt.Errorf("%w (in %s)", err, configFile)
+		}
+		cfg.Targets = filtered
 	}
 
 	// Collect unique drivers
@@ -137,6 +159,108 @@ func runUp(cmd *cobra.Command, args []string) error {
 
 	ui.Info("Starting containers...")
 	return compose.Up(output)
+}
+
+// normalizeDriverFilter canonicalizes CLI driver-name arguments (lowercased,
+// with the same postgres/postgresql and mongo/mongodb aliases LoadConfig
+// applies to targets) so they compare equal to already-normalized drivers.
+func normalizeDriverFilter(args []string) []string {
+	out := make([]string, 0, len(args))
+	seen := make(map[string]bool, len(args))
+	for _, a := range args {
+		d := strings.ToLower(strings.TrimSpace(a))
+		switch d {
+		case "postgresql":
+			d = "postgres"
+		case "mongo":
+			d = "mongodb"
+		}
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		out = append(out, d)
+	}
+	return out
+}
+
+// filterTargetsByDriver returns only the targets matching driverFilter,
+// erroring if any requested driver matches nothing.
+func filterTargetsByDriver(targets []config.TargetConfig, driverFilter []string) ([]config.TargetConfig, error) {
+	want := make(map[string]bool, len(driverFilter))
+	for _, d := range driverFilter {
+		want[d] = true
+	}
+
+	matched := make(map[string]bool, len(driverFilter))
+	filtered := make([]config.TargetConfig, 0, len(targets))
+	for _, t := range targets {
+		if want[t.Driver] {
+			matched[t.Driver] = true
+			filtered = append(filtered, t)
+		}
+	}
+
+	for _, d := range driverFilter {
+		if !matched[d] {
+			return nil, fmt.Errorf("no target with driver %q", d)
+		}
+	}
+
+	return filtered, nil
+}
+
+// resolveComposeServices determines which Compose services `up` should start
+// when using a custom or auto-discovered compose file, which may be a shared,
+// multi-engine stack unrelated to what the current project actually needs. It
+// loads the project's own config (if any) and maps each target's driver to
+// its wired container service (config.ContainerConfig.Service, defaulting to
+// the driver name), so `dbctl up` only starts what this project declares —
+// narrowed further to driverFilter when non-empty.
+//
+// If no project config can be loaded, driverFilter (if any) is returned as-is
+// so its values are used as literal Compose service names; an empty result
+// tells compose.Up to start every service, preserving prior behavior for a
+// bare `--compose` pointing at a file with no associated dbctl config.
+func resolveComposeServices(driverFilter []string) ([]string, error) {
+	configFile := config.FindProjectConfigFile(cfgFile)
+	cfg, err := config.LoadConfig(configFile, nil)
+	if err != nil {
+		return driverFilter, nil
+	}
+
+	if len(cfg.Targets) == 0 {
+		return nil, fmt.Errorf("no target databases defined in %s", configFile)
+	}
+
+	globalPath := config.FindGlobalConfigFile("")
+	if globalPath != "" {
+		if globalCfg, err := config.LoadGlobalConfig(globalPath, nil); err == nil {
+			config.MergeGlobalDefaults(cfg, globalCfg)
+		}
+	}
+
+	if len(driverFilter) > 0 {
+		cfg.Targets, err = filterTargetsByDriver(cfg.Targets, driverFilter)
+		if err != nil {
+			return nil, fmt.Errorf("%w (in %s)", err, configFile)
+		}
+	}
+
+	seen := make(map[string]bool, len(cfg.Targets))
+	services := make([]string, 0, len(cfg.Targets))
+	for _, t := range cfg.Targets {
+		service := t.Driver
+		if t.Container != nil && t.Container.Service != "" {
+			service = t.Container.Service
+		}
+		if !seen[service] {
+			seen[service] = true
+			services = append(services, service)
+		}
+	}
+
+	return services, nil
 }
 
 func runDown(cmd *cobra.Command, args []string) error {

@@ -25,7 +25,7 @@ Instead of writing custom shell scripts or executing brittle `mysql -u root` one
 - **Zero-Admin Project Configs**: Set host defaults once in `~/.dbctl/config.yaml` (or commit a project-local `./.dbctl/config.yaml`). Project repositories never need to check in root passwords.
 - **Full Database Stack Scaffolding**: `dbctl init stack` generates a complete multi-engine `docker-compose.yml` (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense) with healthchecks, persistent volumes, and a shared Docker network other projects can join.
 - **Host Stack Discovery**: Any project on the machine auto-discovers a shared host-wide database stack via `DBCTL_COMPOSE_FILE` / `DBCTL_STACK` or well-known paths (`~/.dbctl/dbs`, `./dbs`) — no per-project compose file needed.
-- **Docker Compose Generation**: Automatically generates `docker-compose.yml` from your config and starts containers with `dbctl up`.
+- **Docker Compose Generation**: Automatically generates `docker-compose.yml` from your config and starts containers with `dbctl up` — pass driver names (`dbctl up mysql`) to start only specific targets instead of everything, including only the services a shared stack actually wires to this project.
 - **Custom Compose Support**: Bring your own `docker-compose.yml` with `dbctl up --compose ./my-file.yml`.
 - **Container Orchestration**: Automatically starts stopped database services via Docker Compose or standalone `docker run` and polls port readiness before provisioning.
 - **Strict Idempotency**: Safe to run repeatedly in development, test suites, and CI/CD pipelines.
@@ -178,6 +178,10 @@ INFO dbctl: ✓ Successfully provisioned 1/1 database target(s)
 # Generate compose file from config and start containers
 dbctl up
 
+# Start only specific targets by driver name
+dbctl up mysql
+dbctl up mysql mongodb
+
 # Generate without starting
 dbctl up --generate-only
 
@@ -191,7 +195,7 @@ dbctl down
 dbctl down --volumes
 ```
 
-`dbctl up` uses a `--compose` file if given; otherwise it auto-discovers an existing host/project stack (see below) before falling back to generating from config.
+`dbctl up` uses a `--compose` file if given; otherwise it auto-discovers an existing host/project stack (see below) before falling back to generating from config. Either way, it only starts the service(s) this project's own config actually needs — not every service in a shared, multi-engine stack file — narrowed further to just the driver(s) named on the command line, if any.
 
 ### Full Database Stack Commands
 
@@ -220,7 +224,7 @@ This means any project on a machine with `DBCTL_COMPOSE_FILE` exported (or a sta
 
 ### Project Config Discovery
 
-The project driver config (`targets:`/`driver:`) defaults to `./dbctl.yaml` — not the generic `config.yaml`, which too easily collides with an unrelated file another tool already put in the project. Global-style `defaults:` config (host/port/admin, container wiring) is looked up separately, checking `./.dbctl/config.yaml` before `~/.dbctl/config.yaml`/`~/.config/dbctl/config.yaml` — so a repo can commit shared, non-secret defaults without needing host-wide setup. `dbctl init project` scaffolds that file.
+The project driver config (`targets:`/`driver:`) resolves to the first of `./dbctl.yaml`, `./dbctl.yml`, `./.dbctl/config.yaml`, `./.dbctl/config.yml` that exists — not the generic `config.yaml`, which too easily collides with an unrelated file another tool already put in the project. `dbctl init` scaffolds `./dbctl.yaml`; the `.dbctl/` fallback exists so a `targets:` config can live there too, e.g. alongside a `defaults:` block written by `dbctl init project`/`dbctl init stack`, without needing a separate `./dbctl.yaml`. Global-style `defaults:` config (host/port/admin, container wiring) is looked up separately, checking `./.dbctl/config.yaml` before `~/.dbctl/config.yaml`/`~/.config/dbctl/config.yaml` — so a repo can commit shared, non-secret defaults without needing host-wide setup.
 
 ---
 

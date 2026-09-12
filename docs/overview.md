@@ -90,7 +90,7 @@ In modern development environments:
    - `ResolveComposeFile` discovers a host/project-wide compose stack via `DBCTL_COMPOSE_FILE`/`DBCTL_STACK` or well-known paths (`~/.dbctl/dbs`, `./dbs`), so projects don't need their own compose file.
 
 3. **Stack Generator (`pkg/compose`)**:
-   - `dbctl up` generates a project-scoped compose file from `dbctl.yaml` targets.
+   - `dbctl up` generates a project-scoped compose file from `dbctl.yaml` targets — or, when reusing a discovered/custom compose file, narrows `docker compose up` to just the service(s) this project's config wires up. Either way, an optional driver-name argument (`dbctl up mysql`) narrows it further to a subset of targets.
    - `dbctl init stack` generates a full, standalone multi-engine stack (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense) by filtering an embedded Compose template (`pkg/compose/templates/stack/`) — engine definitions live in that template, not hardcoded in Go.
    - Every stack it generates gets a hashed, directory-unique Compose project name (avoiding cross-stack `down`/`up` collisions) and joins a fixed shared network (`dbctl-net`) that other, unrelated compose projects can attach to.
 

@@ -64,6 +64,12 @@ Beautiful terminal output using:
 - `dbctl init stack`'s local/default destination moved to `./.dbctl/dbs/` + `./.dbctl/config.yaml` (previously `./dbs/` + `./config.yaml`), so it can never collide with the project driver config even by coincidence
 - `ResolveComposeFile` checks `./.dbctl/dbs/` before the plain `./dbs/`
 - No backward compatibility shim: the old `./config.yaml` name/location is no longer searched
+- `FindProjectConfigFile` now also falls back to `./.dbctl/config.yaml`/`./.dbctl/config.yml` (after `./dbctl.yaml`/`./dbctl.yml`) when resolving the project driver config, matching the `--config` flag's documented default and letting a `targets:` block live in `.dbctl/config.yaml` too — alongside, or instead of, a `defaults:` block, since each lookup only reads its own top-level key
+
+### Selective `dbctl up` (Driver Filtering + Shared-Stack Narrowing)
+- `dbctl up [driver...]` accepts optional driver-name arguments (e.g. `dbctl up mysql`) to start only matching targets, whether generating a fresh compose file from config or reusing a discovered/custom one — an unmatched driver errors clearly instead of silently starting nothing
+- When reusing a discovered or `--compose`-supplied file, `dbctl up` (even with no driver filter) now only starts the service(s) this project's own config maps its targets to (`container.service`, defaulting to the driver name) — previously it ran `docker compose up -d` with no service arguments, starting *every* service in the file, which meant an unrelated engine in a shared, multi-engine stack (e.g. `dbctl init stack`'s Redis/Kafka/Postgres) got started for a project that only declares a `mysql` target
+- `pkg/compose.Up` takes optional variadic `services ...string` to support this; `dbctl down` is unchanged and still stops every service in the resolved compose file
 
 ---
 

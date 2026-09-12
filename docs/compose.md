@@ -14,6 +14,11 @@
 # Generate docker-compose.dbctl.yml and start containers
 dbctl up
 
+# Start only specific targets by driver name — skips generating/starting
+# anything for targets not named
+dbctl up mysql
+dbctl up mysql mongodb
+
 # Generate without starting containers
 dbctl up --generate-only
 
@@ -23,6 +28,8 @@ dbctl up -c my-project.yaml
 # Custom output path for generated compose file
 dbctl up --output ./infra/docker-compose.yml
 ```
+
+A driver filter also applies when `dbctl up` is reusing a discovered or custom compose file (see [Host Stack Discovery](#host-stack-discovery)) — it's translated to that target's wired `container.service` name before being passed to `docker compose up -d`.
 
 ### What Gets Generated
 
@@ -206,6 +213,8 @@ Because the network name is fixed and not tied to the stack directory, only run 
 6. `./dbs/docker-compose.yml`, `./docker-compose.yml`, `./compose.yml`, `./compose.yaml`
 
 `dbctl up` uses this resolution (when no `--compose` flag is passed) to prefer an already-discovered stack over generating a fresh `docker-compose.dbctl.yml` from config — so once a host stack exists and `DBCTL_COMPOSE_FILE` is exported, `dbctl up` in any project just starts/reuses it.
+
+A discovered (or `--compose`-supplied) file is often a *shared* stack with engines this particular project doesn't use — a host-wide `dbctl init stack global` stack, for example, may include Redis, Kafka, and Postgres even though this project's `dbctl.yaml` only has a `mysql` target. Rather than starting every service the file defines, `dbctl up` loads this project's own config, maps each of its targets to the Compose service it's wired to (`container.service`, or the driver name if unset), and passes only those service names to `docker compose up -d <service...>` — so `dbctl up` here starts just `mysql`, leaving the other engines in the shared stack untouched. Pass driver names on the command line (`dbctl up mysql`) to narrow this further; if no project config can be found at all, `dbctl up` falls back to starting every service in the file (or, with a driver filter, treats the given names as literal service names). Note `dbctl down` isn't scoped this way — it still stops every service in the resolved compose file.
 
 ---
 

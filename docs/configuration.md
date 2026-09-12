@@ -4,12 +4,12 @@
 
 There are two distinct kinds of config file, resolved independently and never mixed up by filename:
 
-| | Format | Default path | Scaffolded by |
+| | Format | Resolution order | Scaffolded by |
 | :--- | :--- | :--- | :--- |
-| **Project driver config** | `targets:` (or a single root `driver:`) | `./dbctl.yaml` | `dbctl init` / `dbctl init minimal` |
-| **Global-style defaults** | `defaults:` | `./.dbctl/config.yaml`, `~/.dbctl/config.yaml`, or `~/.config/dbctl/config.yaml` | `dbctl init global` / `dbctl init project` / `dbctl init stack` |
+| **Project driver config** | `targets:` (or a single root `driver:`) | `./dbctl.yaml`, `./dbctl.yml`, `./.dbctl/config.yaml`, `./.dbctl/config.yml` — first one found | `dbctl init` / `dbctl init minimal` |
+| **Global-style defaults** | `defaults:` | `./.dbctl/config.yaml`, `~/.dbctl/config.yaml`, or `~/.config/dbctl/config.yaml` — first one found | `dbctl init global` / `dbctl init project` / `dbctl init stack` |
 
-The project driver config is deliberately not named the generic `config.yaml` — that name is too likely to already be in use by something else in the project.
+The project driver config is deliberately not named the generic `config.yaml` — that name is too likely to already be in use by something else in the project. `./.dbctl/config.yaml` is checked by *both* lookups above but for different YAML keys (`targets:`/`driver:` vs. `defaults:`), so one file at that path can hold either — or both, merged together (see [Configuration Merging Hierarchy](#configuration-merging-hierarchy)) — without conflict.
 
 ---
 
@@ -21,7 +21,7 @@ The project driver config is deliberately not named the generic `config.yaml` �
 2. **Global Configuration**: Loaded from `./.dbctl/config.yaml` (project-local), `~/.dbctl/config.yaml`, or `~/.config/dbctl/config.yaml` — whichever is found first, in that order.
 3. **Environment Files**: Loaded via `-env <file>` or `-e <file>` (and auto-loaded `./.env` if present).
 4. **OS Environment Variables**: Interpolated into `${VAR}` or `${VAR:-default}`.
-5. **Project Config**: Specified via `-config <path>` (default: `./dbctl.yaml`); overrides everything above.
+5. **Project Config**: Specified via `-config <path>` (default: first existing of `./dbctl.yaml`, `./dbctl.yml`, `./.dbctl/config.yaml`, `./.dbctl/config.yml`); overrides everything above.
 
 ---
 
