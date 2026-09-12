@@ -244,6 +244,124 @@ Provide a pre-built GitHub Action for CI/CD pipelines:
 
 ---
 
+### 14. Config Validation & Linting (`dbctl validate`)
+
+Catch mistakes in `config.yaml` before they hit a live database — invalid driver names, duplicate database/user names, missing required fields, malformed `${VAR}` interpolation — without needing Docker or network access.
+
+```bash
+dbctl validate                  # Validate ./config.yaml
+dbctl validate -c staging.yaml  # Validate a specific file
+dbctl validate --json           # Machine-readable output for CI
+```
+
+**Benefits**:
+- Fails fast in CI before spending time starting containers.
+- Safe to run as a pre-commit hook or PR check on config changes.
+
+---
+
+### 15. Environment Doctor (`dbctl doctor`)
+
+`dbctl status` checks the *targets*; `dbctl doctor` checks the *host machine* dbctl is running on — is Docker installed and the daemon reachable, is the user in the `docker` group, are `mysql`/`psql`/`mongosh` clients available for `dbctl connect`, is there enough free disk space for volumes.
+
+```bash
+dbctl doctor
+```
+
+```text
+[dbctl] Environment Diagnostics:
+  [✓] Docker daemon reachable (v27.3.1)
+  [✓] docker compose plugin available (v2.29.0)
+  [✗] mysql client not found in PATH (needed for `dbctl connect mysql`)
+  [✓] 42.1 GB free disk space
+```
+
+---
+
+### 16. Modular / Multi-File Configs (`include:`)
+
+Large teams and monorepos often need one target per service. Let `config.yaml` compose smaller files instead of one growing monolith:
+
+```yaml
+include:
+  - "./services/auth/db.yaml"
+  - "./services/billing/db.yaml"
+  - "./services/*.db.yaml"   # glob support
+```
+
+**Benefits**:
+- Each service/team owns its own database definition file.
+- Root config stays a short, reviewable table of contents.
+
+---
+
+### 17. Reverse Introspection (`dbctl introspect`)
+
+Onboard an existing, hand-built database onto dbctl by generating a starting `config.yaml` from what's actually running — instead of hand-transcribing databases, users, and grants.
+
+```bash
+dbctl introspect mysql --host 127.0.0.1 --port 3306 --admin-user root > config.yaml
+```
+
+**Implementation**:
+- Reuses the existing driver interface in reverse: list databases, list users/hosts, list grants, and marshal them into the standard schema (passwords omitted, left as `${VAR}` placeholders).
+
+---
+
+### 18. Interactive Init Wizard (`dbctl init --interactive`)
+
+`dbctl` already depends on `charmbracelet/huh` for spinners — extend it into a guided, prompt-based config builder instead of a static template:
+
+```bash
+dbctl init --interactive
+```
+
+Walks through driver selection, host/port, admin credentials, and database/user definitions with form validation, then writes the resulting `config.yaml`.
+
+---
+
+### 19. Watch Mode (`--watch`)
+
+Tighten the local dev loop by re-provisioning automatically whenever `config.yaml` changes, instead of re-running the command by hand after every edit:
+
+```bash
+dbctl provision --watch
+```
+
+```text
+[dbctl] Watching config.yaml for changes...
+[dbctl] Change detected, re-provisioning...
+```
+
+---
+
+### 20. Encrypted Secrets at Rest (`dbctl config encrypt` / `decrypt`)
+
+A lighter-weight alternative to full secret-manager integrations (#3): encrypt just the sensitive fields of `config.yaml` in place using `age` or a SOPS-compatible format, so the file is safe to commit as-is.
+
+```bash
+dbctl config encrypt config.yaml   # Encrypts admin/user passwords in place
+dbctl config decrypt config.yaml   # Decrypts for local editing
+```
+
+`dbctl provision` decrypts transparently at load time given `DBCTL_AGE_KEY` (or an equivalent key file).
+
+---
+
+### 21. Notifications & Webhooks (`notify:`)
+
+Report provisioning outcomes to Slack, Discord, or a generic webhook — useful for CI pipelines and shared dev databases where a silent failure is easy to miss.
+
+```yaml
+notify:
+  on: [success, failure]
+  slack_webhook: "${SLACK_WEBHOOK_URL}"
+  # or:
+  # webhook: "https://example.com/hooks/dbctl"
+```
+
+---
+
 ## Summary Priority Matrix
 
 | Phase | Feature | Complexity | Impact |
@@ -251,13 +369,21 @@ Provide a pre-built GitHub Action for CI/CD pipelines:
 | **P1** | Complete PostgreSQL & MongoDB Driver Implementations | Medium | High |
 | **P1** | Database Schema / SQL Seeders (`schema:` & `seed:`) | Low | High |
 | **P1** | Quick Connect (`dbctl connect`) | Low | Medium |
+| **P1** | Config Validation & Linting (`dbctl validate`) | Low | High |
+| **P1** | Environment Doctor (`dbctl doctor`) | Low | Medium |
 | **P2** | Connection URL Generator (`dbctl export`) | Low | Medium |
 | **P2** | Instant Snapshots & Restore (`dbctl snapshot`) | Medium | High |
 | **P2** | Health Checks (`dbctl health`) | Low | Medium |
 | **P2** | Database Reset (`dbctl reset`) | Low | Medium |
+| **P2** | Watch Mode (`--watch`) | Low | Medium |
+| **P2** | Modular / Multi-File Configs (`include:`) | Low | Medium |
 | **P3** | Secret Store Integrations (Vault, 1Password, AWS) | Medium | Medium |
 | **P3** | Drift Detection (`dbctl diff`) | High | High |
 | **P3** | Profile System | Medium | Medium |
+| **P3** | Encrypted Secrets at Rest (`dbctl config encrypt`) | Medium | Medium |
+| **P3** | Notifications & Webhooks (`notify:`) | Low | Medium |
+| **P3** | Reverse Introspection (`dbctl introspect`) | Medium | Medium |
 | **P4** | Interactive TUI Dashboard (`dbctl ui`) | Medium | Delight |
+| **P4** | Interactive Init Wizard (`dbctl init --interactive`) | Low | Delight |
 | **P4** | Cloud Provider Provisioning | High | High |
 | **P4** | GitHub Action | Medium | Medium |
