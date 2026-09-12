@@ -258,6 +258,12 @@ func LoadConfig(path string, envMap map[string]string) (*Config, error) {
 // checking (in order): an explicit path, DBCTL_GLOBAL_CONFIG, a project-local
 // ./.dbctl/config.yaml (lets a repo commit shared, non-secret defaults), then
 // the host-wide ~/.dbctl/ and ~/.config/dbctl/ locations.
+//
+// Since FindProjectConfigFile also accepts ./.dbctl/config.yaml as a fallback
+// project driver config location, that path may exist purely as a `targets:`
+// file with no `defaults:` block at all. A local candidate like that is
+// skipped rather than returned, so it doesn't shadow a host-wide config
+// (~/.dbctl/config.yaml) that actually has defaults to offer.
 func FindGlobalConfigFile(explicitPath string) string {
 	if explicitPath != "" {
 		if _, err := os.Stat(explicitPath); err == nil {
@@ -277,7 +283,7 @@ func FindGlobalConfigFile(explicitPath string) string {
 		filepath.Join(".dbctl", "config.yml"),
 	}
 	for _, c := range localCandidates {
-		if _, err := os.Stat(c); err == nil {
+		if hasGlobalDefaults(c) {
 			return c
 		}
 	}
@@ -291,13 +297,29 @@ func FindGlobalConfigFile(explicitPath string) string {
 			filepath.Join(home, ".config", "dbctl", "config.yml"),
 		}
 		for _, c := range candidates {
-			if _, err := os.Stat(c); err == nil {
+			if hasGlobalDefaults(c) {
 				return c
 			}
 		}
 	}
 
 	return ""
+}
+
+// hasGlobalDefaults reports whether path exists and actually declares a
+// usable "defaults:" block (map form or the flat per-driver root shorthand
+// LoadGlobalConfig also accepts) — as opposed to, say, a project driver
+// config's "targets:" file that happens to live at the same ./.dbctl/config.yaml
+// path FindProjectConfigFile falls back to.
+func hasGlobalDefaults(path string) bool {
+	if _, err := os.Stat(path); err != nil {
+		return false
+	}
+	g, err := LoadGlobalConfig(path, nil)
+	if err != nil {
+		return false
+	}
+	return len(g.Defaults) > 0
 }
 
 // LoadGlobalConfig loads global configuration and returns the parsed GlobalConfig.

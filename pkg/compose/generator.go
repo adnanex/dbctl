@@ -21,6 +21,11 @@ var defaults = map[string]engineDefaults{
 		Image: "mysql:8.0-debian",
 		EnvVars: map[string]string{
 			"MYSQL_ROOT_PASSWORD": "${MYSQL_ROOT_PASSWORD:-rootpassword}",
+			// Without this, the image only creates 'root'@'localhost' —
+			// connections via the published port (which MySQL sees coming
+			// from the Docker bridge gateway, not literally "localhost")
+			// get "Access denied".
+			"MYSQL_ROOT_HOST": "%",
 		},
 		DataDir:     "/var/lib/mysql",
 		Healthcheck: `["CMD", "mysqladmin", "ping", "-h", "localhost"]`,

@@ -7,6 +7,10 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-rootpassword}"
+      # Without this, the image only creates 'root'@'localhost' — connections
+      # via the published port (which MySQL sees coming from the Docker
+      # bridge gateway, not literally "localhost") get "Access denied".
+      MYSQL_ROOT_HOST: "%"
     volumes:
       - dbctl-mysql-data:/var/lib/mysql
     healthcheck:
