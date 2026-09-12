@@ -1,6 +1,7 @@
 package compose
 
 import (
+	_ "embed"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -8,94 +9,137 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-// StackEngine describes one service available in the full local database stack.
-// Driver is the dbctl driver name used for provisioning (empty if the engine
-// has no dbctl driver and is only managed as a container, e.g. redis).
-type StackEngine struct {
-	Driver      string
-	Service     string
-	Image       string
-	Port        int
-	Env         []string // ordered "KEY=value" pairs, value may contain ${VAR:-default}
-	Command     []string
-	DataPath    string
-	Healthcheck []string
+//go:embed templates/stack/docker-compose.yml
+var stackTemplate string
+
+//go:embed templates/stack/engines.yaml
+var stackEngineDrivers []byte
+
+// engineDrivers maps a stack service/engine key to its dbctl driver name, as
+// declared in templates/stack/engines.yaml. Engines with no dbctl driver
+// (e.g. redis, rabbitmq, kafka, nats, typesense) are simply absent.
+func engineDrivers() map[string]string {
+	var m map[string]string
+	_ = yaml.Unmarshal(stackEngineDrivers, &m)
+	return m
 }
 
-var stackEngines = map[string]StackEngine{
-	"mysql": {
-		Driver: "mysql", Service: "mysql", Image: "mysql:8.0-debian", Port: 3306,
-		Env:         []string{"MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}"},
-		DataPath:    "/var/lib/mysql",
-		Healthcheck: []string{"CMD", "mysqladmin", "ping", "-h", "localhost"},
-	},
-	"postgres": {
-		Driver: "postgres", Service: "postgres", Image: "postgres:16-alpine", Port: 5432,
-		Env:         []string{"POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rootpassword}"},
-		DataPath:    "/var/lib/postgresql/data",
-		Healthcheck: []string{"CMD-SHELL", "pg_isready -U postgres"},
-	},
-	"mongo": {
-		Driver: "mongodb", Service: "mongo", Image: "mongo:7", Port: 27017,
-		Env: []string{
-			"MONGO_INITDB_ROOT_USERNAME=root",
-			"MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:-rootpassword}",
-		},
-		DataPath:    "/data/db",
-		Healthcheck: []string{"CMD", "mongosh", "--eval", "db.adminCommand('ping')"},
-	},
-	"redis": {
-		Service: "redis", Image: "redis:7-alpine", Port: 6379,
-		DataPath:    "/data",
-		Healthcheck: []string{"CMD", "redis-cli", "ping"},
-	},
-	"rabbitmq": {
-		Service: "rabbitmq", Image: "rabbitmq:3-management-alpine", Port: 5672,
-		Env: []string{
-			"RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER:-guest}",
-			"RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:-guest}",
-		},
-		DataPath:    "/var/lib/rabbitmq",
-		Healthcheck: []string{"CMD", "rabbitmq-diagnostics", "-q", "ping"},
-	},
-	"kafka": {
-		Service: "kafka", Image: "bitnami/kafka:3.7", Port: 9092,
-		Env: []string{
-			"KAFKA_CFG_NODE_ID=0",
-			"KAFKA_CFG_PROCESS_ROLES=controller,broker",
-			"KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093",
-			"KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092",
-			"KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093",
-			"KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER",
-			"ALLOW_PLAINTEXT_LISTENER=yes",
-		},
-		DataPath:    "/bitnami/kafka",
-		Healthcheck: []string{"CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"},
-	},
-	"nats": {
-		Service: "nats", Image: "nats:2-alpine", Port: 4222,
-		Command:     []string{"-js", "-m", "8222"},
-		DataPath:    "/data",
-		Healthcheck: []string{"CMD-SHELL", "nc -z localhost 4222 || exit 1"},
-	},
-	"typesense": {
-		Service: "typesense", Image: "typesense/typesense:27.1", Port: 8108,
-		Command:     []string{"--data-dir", "/data", "--api-key=${TYPESENSE_API_KEY:-xyz}"},
-		DataPath:    "/data",
-		Healthcheck: []string{"CMD-SHELL", "curl -fs http://localhost:8108/health || exit 1"},
-	},
+// servicesNode returns the "services" mapping node of the embedded stack template.
+func servicesNode() (*yaml.Node, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(stackTemplate), &root); err != nil {
+		return nil, fmt.Errorf("failed to parse stack template: %w", err)
+	}
+	if len(root.Content) == 0 {
+		return nil, fmt.Errorf("stack template is empty")
+	}
+	return findChild(root.Content[0], "services")
 }
 
-// StackEngineKeys returns the supported stack engine keys, sorted alphabetically.
+// findChild returns the value node for key in a YAML mapping node.
+func findChild(mapping *yaml.Node, key string) (*yaml.Node, error) {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return mapping.Content[i+1], nil
+		}
+	}
+	return nil, fmt.Errorf("key %q not found", key)
+}
+
+// StackEngineKeys returns the supported stack engine keys, sorted alphabetically,
+// as declared by the embedded stack template's services.
 func StackEngineKeys() []string {
-	keys := make([]string, 0, len(stackEngines))
-	for k := range stackEngines {
-		keys = append(keys, k)
+	services, err := servicesNode()
+	if err != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(services.Content)/2)
+	for i := 0; i+1 < len(services.Content); i += 2 {
+		keys = append(keys, services.Content[i].Value)
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// GenerateStack builds docker-compose.yml content for the requested engines by
+// filtering the embedded stack template down to just those services (and their
+// matching named volumes). An empty/nil engines slice generates the full stack.
+// projectName, if non-empty, is written as the top-level Compose "name" to pin
+// the project identity to this specific stack directory (see ProjectName).
+func GenerateStack(engines []string, projectName string) (string, error) {
+	allKeys := StackEngineKeys()
+	if len(engines) == 0 {
+		engines = allKeys
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(stackTemplate), &root); err != nil {
+		return "", fmt.Errorf("failed to parse stack template: %w", err)
+	}
+	services, err := findChild(root.Content[0], "services")
+	if err != nil {
+		return "", fmt.Errorf("stack template has no services section")
+	}
+	volumes, _ := findChild(root.Content[0], "volumes") // optional
+
+	selected := make(map[string]bool, len(engines))
+	for _, e := range engines {
+		key := strings.ToLower(strings.TrimSpace(e))
+		if _, err := findChild(services, key); err != nil {
+			return "", fmt.Errorf("unknown stack engine %q (available: %s)", key, strings.Join(allKeys, ", "))
+		}
+		selected[key] = true
+	}
+
+	filteredServices := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	for i := 0; i+1 < len(services.Content); i += 2 {
+		key := services.Content[i].Value
+		if selected[key] {
+			filteredServices.Content = append(filteredServices.Content, services.Content[i], services.Content[i+1])
+		}
+	}
+
+	out := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	appendKV(out, "services", filteredServices)
+
+	if volumes != nil {
+		filteredVolumes := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		for i := 0; i+1 < len(volumes.Content); i += 2 {
+			volName := volumes.Content[i].Value
+			for svc := range selected {
+				if volName == fmt.Sprintf("dbctl-%s-data", svc) {
+					filteredVolumes.Content = append(filteredVolumes.Content, volumes.Content[i], volumes.Content[i+1])
+					break
+				}
+			}
+		}
+		if len(filteredVolumes.Content) > 0 {
+			appendKV(out, "volumes", filteredVolumes)
+		}
+	}
+
+	body, err := yaml.Marshal(out)
+	if err != nil {
+		return "", fmt.Errorf("failed to render stack compose: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString("# Auto-generated by dbctl — regenerate with: dbctl init stack --force\n")
+	b.WriteString("# Discovered automatically via DBCTL_COMPOSE_FILE / DBCTL_STACK, or ~/.dbctl/dbs, ./dbs\n\n")
+	if projectName != "" {
+		b.WriteString(fmt.Sprintf("name: %s\n\n", projectName))
+	}
+	b.Write(body)
+
+	return b.String(), nil
+}
+
+func appendKV(mapping *yaml.Node, key string, value *yaml.Node) {
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, value)
 }
 
 // ProjectName derives a Docker Compose project name for a stack directory from
@@ -112,101 +156,14 @@ func ProjectName(dir string) string {
 	return "dbctl-" + hex.EncodeToString(sum[:])[:12]
 }
 
-// GenerateStack builds docker-compose.yml content for the requested engines.
-// An empty/nil engines slice generates the full default stack. projectName, if
-// non-empty, is written as the top-level Compose "name" to pin the project
-// identity to this specific stack directory (see ProjectName).
-func GenerateStack(engines []string, projectName string) (string, error) {
-	if len(engines) == 0 {
-		engines = StackEngineKeys()
-	}
-
-	var b strings.Builder
-	b.WriteString("# Auto-generated by dbctl — regenerate with: dbctl init stack --force\n")
-	b.WriteString("# Discovered automatically via DBCTL_COMPOSE_FILE / DBCTL_STACK, or ~/.dbctl/dbs, ./dbs\n\n")
-	if projectName != "" {
-		b.WriteString(fmt.Sprintf("name: %s\n\n", projectName))
-	}
-	b.WriteString("services:\n")
-
-	volumeNames := make([]string, 0, len(engines))
-	seen := make(map[string]bool)
-
-	for _, key := range engines {
-		key = strings.ToLower(strings.TrimSpace(key))
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-
-		eng, ok := stackEngines[key]
-		if !ok {
-			return "", fmt.Errorf("unknown stack engine %q (available: %s)", key, strings.Join(StackEngineKeys(), ", "))
-		}
-
-		volumeName := fmt.Sprintf("dbctl-%s-data", eng.Service)
-		volumeNames = append(volumeNames, volumeName)
-
-		b.WriteString(fmt.Sprintf("  %s:\n", eng.Service))
-		b.WriteString(fmt.Sprintf("    image: %s\n", eng.Image))
-		b.WriteString(fmt.Sprintf("    container_name: dbctl-%s\n", eng.Service))
-		b.WriteString("    restart: unless-stopped\n")
-
-		b.WriteString("    ports:\n")
-		b.WriteString(fmt.Sprintf("      - \"%d:%d\"\n", eng.Port, eng.Port))
-
-		if len(eng.Command) > 0 {
-			b.WriteString("    command:\n")
-			for _, c := range eng.Command {
-				b.WriteString(fmt.Sprintf("      - %q\n", c))
-			}
-		}
-
-		if len(eng.Env) > 0 {
-			b.WriteString("    environment:\n")
-			for _, kv := range eng.Env {
-				parts := strings.SplitN(kv, "=", 2)
-				b.WriteString(fmt.Sprintf("      %s: \"%s\"\n", parts[0], parts[1]))
-			}
-		}
-
-		if eng.DataPath != "" {
-			b.WriteString("    volumes:\n")
-			b.WriteString(fmt.Sprintf("      - %s:%s\n", volumeName, eng.DataPath))
-		}
-
-		if len(eng.Healthcheck) > 0 {
-			b.WriteString("    healthcheck:\n")
-			b.WriteString("      test:\n")
-			for _, part := range eng.Healthcheck {
-				b.WriteString(fmt.Sprintf("        - %q\n", part))
-			}
-			b.WriteString("      interval: 5s\n")
-			b.WriteString("      timeout: 3s\n")
-			b.WriteString("      retries: 10\n")
-			b.WriteString("      start_period: 10s\n")
-		}
-
-		b.WriteString("\n")
-	}
-
-	if len(volumeNames) > 0 {
-		b.WriteString("volumes:\n")
-		for _, v := range volumeNames {
-			b.WriteString(fmt.Sprintf("  %s:\n", v))
-		}
-	}
-
-	return b.String(), nil
-}
-
 // GenerateStackConfig builds a dbctl config.yaml (defaults-style) that wires
-// the driver-backed engines (mysql, postgres, mongo) in the given stack to the
-// generated compose file at composeFilePath.
+// the driver-backed engines (per templates/stack/engines.yaml) in the given
+// stack to the generated compose file at composeFilePath.
 func GenerateStackConfig(engines []string, composeFilePath string) string {
 	if len(engines) == 0 {
 		engines = StackEngineKeys()
 	}
+	drivers := engineDrivers()
 
 	var b strings.Builder
 	b.WriteString("# Auto-generated by dbctl — points dbctl at the generated stack.\n")
@@ -216,20 +173,20 @@ func GenerateStackConfig(engines []string, composeFilePath string) string {
 	wrote := false
 	for _, key := range engines {
 		key = strings.ToLower(strings.TrimSpace(key))
-		eng, ok := stackEngines[key]
-		if !ok || eng.Driver == "" {
+		driver, ok := drivers[key]
+		if !ok || driver == "" {
 			continue
 		}
 		wrote = true
 
-		b.WriteString(fmt.Sprintf("  %s:\n", eng.Driver))
+		b.WriteString(fmt.Sprintf("  %s:\n", driver))
 		b.WriteString("    container:\n")
 		b.WriteString(fmt.Sprintf("      compose_file: \"%s\"\n", composeFilePath))
-		b.WriteString(fmt.Sprintf("      service: \"%s\"\n", eng.Service))
+		b.WriteString(fmt.Sprintf("      service: \"%s\"\n", key))
 	}
 
 	if !wrote {
-		b.WriteString("  {} # no provisionable engines selected (redis/rabbitmq/kafka/nats/typesense have no dbctl driver)\n")
+		b.WriteString("  {} # no provisionable engines selected (some engines have no dbctl driver)\n")
 	}
 
 	return b.String()

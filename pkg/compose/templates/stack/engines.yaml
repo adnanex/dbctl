@@ -1,0 +1,6 @@
+# Maps each service in docker-compose.yml to its dbctl driver (pkg/driver).
+# Engines with no entry here (redis, rabbitmq, kafka, nats, typesense) are
+# container-only: dbctl can start/stop them but has no provisioning driver.
+mysql: mysql
+postgres: postgres
+mongo: mongodb
