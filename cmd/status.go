@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/adnanex/dbctl/pkg/config"
+	"github.com/adnanex/dbctl/pkg/container"
 	"github.com/adnanex/dbctl/pkg/driver"
 	"github.com/adnanex/dbctl/pkg/ui"
 )
@@ -106,13 +107,21 @@ func checkContainerStatus(cfg *config.ContainerConfig, driverName string) string
 
 	// Check Compose service
 	if cfg.Service != "" || cfg.ComposeFile != "" {
+		composeFile := container.ResolveComposeFile(cfg.ComposeFile)
 		service := cfg.Service
 		if service == "" {
 			service = driverName
 		}
-		cmd := exec.Command(dockerPath, "compose", "ps", "--status", "running", service)
-		out, _ := cmd.CombinedOutput()
-		if len(out) > 0 && fmt.Sprintf("%s", out) != "" {
+
+		args := []string{"compose"}
+		if composeFile != "" {
+			args = append(args, "-f", composeFile)
+		}
+		args = append(args, "ps", "-q", "--status", "running", service)
+
+		cmd := exec.Command(dockerPath, args...)
+		out, _ := cmd.Output()
+		if strings.TrimSpace(string(out)) != "" {
 			return ui.SuccessStyle.Render("running")
 		}
 		return ui.WarningStyle.Render("stopped")

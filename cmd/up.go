@@ -10,6 +10,7 @@ import (
 
 	"github.com/adnanex/dbctl/pkg/compose"
 	"github.com/adnanex/dbctl/pkg/config"
+	"github.com/adnanex/dbctl/pkg/container"
 	"github.com/adnanex/dbctl/pkg/ui"
 )
 
@@ -56,12 +57,23 @@ func runUp(cmd *cobra.Command, args []string) error {
 	customCompose, _ := cmd.Flags().GetString("compose")
 	output, _ := cmd.Flags().GetString("output")
 
-	// If using custom compose file, just run it
+	// If no explicit --compose flag was given, check whether a host/project stack
+	// (DBCTL_COMPOSE_FILE, DBCTL_STACK, ~/.dbctl/dbs, ./dbs, ...) already exists
+	// before falling back to generating a fresh compose file from config.
+	if customCompose == "" {
+		if discovered := container.ResolveComposeFile(""); discovered != "" {
+			if _, err := os.Stat(discovered); err == nil {
+				customCompose = discovered
+			}
+		}
+	}
+
+	// If using custom (or discovered) compose file, just run it
 	if customCompose != "" {
 		if _, err := os.Stat(customCompose); os.IsNotExist(err) {
 			return fmt.Errorf("compose file not found: %s", customCompose)
 		}
-		ui.Info("Using custom compose file", "path", customCompose)
+		ui.Info("Using compose file", "path", customCompose)
 		if !generateOnly {
 			return compose.Up(customCompose)
 		}

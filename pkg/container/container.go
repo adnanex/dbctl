@@ -7,12 +7,71 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/adnanex/dbctl/pkg/config"
 	"github.com/adnanex/dbctl/pkg/ui"
 )
+
+// ResolveComposeFile resolves which Docker Compose file to use, checking in order:
+//  1. explicitPath, if it points to an existing file (e.g. a target's configured compose_file)
+//  2. the host environment variables DBCTL_COMPOSE_FILE (a file) or DBCTL_STACK (a directory)
+//  3. user home locations: ~/.dbctl/dbs/docker-compose.yml, ~/.config/dbctl/dbs/docker-compose.yml
+//  4. local locations: ./dbs/docker-compose.yml, ./docker-compose.yml
+//
+// This lets any project seamlessly discover a host-wide database stack without
+// hardcoding its location in project-level configuration.
+func ResolveComposeFile(explicitPath string) string {
+	if explicitPath != "" {
+		if _, err := os.Stat(explicitPath); err == nil {
+			return explicitPath
+		}
+	}
+
+	composeFileNames := []string{"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"}
+
+	if envFile := os.Getenv("DBCTL_COMPOSE_FILE"); envFile != "" {
+		if _, err := os.Stat(envFile); err == nil {
+			return envFile
+		}
+	}
+
+	if stackDir := os.Getenv("DBCTL_STACK"); stackDir != "" {
+		for _, name := range composeFileNames {
+			candidate := filepath.Join(stackDir, name)
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
+		}
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		for _, dir := range []string{
+			filepath.Join(home, ".dbctl", "dbs"),
+			filepath.Join(home, ".config", "dbctl", "dbs"),
+		} {
+			for _, name := range composeFileNames {
+				candidate := filepath.Join(dir, name)
+				if _, err := os.Stat(candidate); err == nil {
+					return candidate
+				}
+			}
+		}
+	}
+
+	for _, candidate := range append(
+		[]string{filepath.Join("dbs", "docker-compose.yml"), filepath.Join("dbs", "docker-compose.yaml")},
+		composeFileNames...,
+	) {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return explicitPath
+}
 
 // EnsureContainerRunning starts the container (via Compose or Docker run) if not already active
 // and waits until the target port is accepting connections.
@@ -51,40 +110,30 @@ func EnsureContainerRunning(ctx context.Context, cfg *config.ContainerConfig, dr
 }
 
 func ensureComposeService(ctx context.Context, dockerPath string, cfg *config.ContainerConfig, driverName string) error {
-	composeFile := cfg.ComposeFile
-	if composeFile == "" {
-		for _, f := range []string{"docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"} {
-			if _, err := os.Stat(f); err == nil {
-				composeFile = f
-				break
-			}
-		}
-	}
+	composeFile := ResolveComposeFile(cfg.ComposeFile)
 
 	service := cfg.Service
 	if service == "" {
 		service = driverName
 	}
 
-	var args []string
+	baseArgs := []string{"compose"}
 	if composeFile != "" {
-		args = append(args, "compose", "-f", composeFile)
-	} else {
-		args = append(args, "compose")
+		baseArgs = append(baseArgs, "-f", composeFile)
 	}
 
-	// Check status
-	checkArgs := append(args, "ps", "--status", "running", service)
+	// Check status via -q: prints the running container ID, or nothing if not running.
+	checkArgs := append(append([]string{}, baseArgs...), "ps", "-q", "--status", "running", service)
 	cmd := exec.CommandContext(ctx, dockerPath, checkArgs...)
-	out, _ := cmd.CombinedOutput()
+	out, _ := cmd.Output()
 
-	if strings.Contains(string(out), service) {
+	if strings.TrimSpace(string(out)) != "" {
 		ui.Info("Compose service already running", "service", service)
 		return nil
 	}
 
 	ui.Info("Starting Compose service", "service", service, "file", composeFile)
-	upArgs := append(args, "up", "-d", service)
+	upArgs := append(append([]string{}, baseArgs...), "up", "-d", service)
 	upCmd := exec.CommandContext(ctx, dockerPath, upArgs...)
 	upCmd.Stdout = os.Stdout
 	upCmd.Stderr = os.Stderr

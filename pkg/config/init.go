@@ -49,6 +49,38 @@ func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error
 	}
 }
 
+// ResolveStackPath resolves a destination directory for a database stack (docker-compose.yml)
+// and the matching config.yaml path, based on keywords or an explicit path.
+func ResolveStackPath(dest string) (stackDir string, configPath string, err error) {
+	home, _ := os.UserHomeDir()
+
+	trimmed := strings.TrimSpace(dest)
+	switch strings.ToLower(trimmed) {
+	case "", "local", "project", "./", ".":
+		return "dbs", "config.yaml", nil
+	case "global", "~", "~/", "~/.dbctl":
+		if home == "" {
+			return "", "", fmt.Errorf("unable to determine user home directory")
+		}
+		return filepath.Join(home, ".dbctl", "dbs"), filepath.Join(home, ".dbctl", "config.yaml"), nil
+	case "config", "~/.config", "config-dir", "~/.config/dbctl":
+		if home == "" {
+			return "", "", fmt.Errorf("unable to determine user home directory")
+		}
+		return filepath.Join(home, ".config", "dbctl", "dbs"), filepath.Join(home, ".config", "dbctl", "config.yaml"), nil
+	default:
+		if strings.HasPrefix(trimmed, "~/") {
+			if home != "" {
+				trimmed = filepath.Join(home, trimmed[2:])
+			}
+		}
+		// Treat an explicit destination as a base directory: the stack lives
+		// in its "dbs" subdirectory, with the matching config.yaml alongside it —
+		// mirroring the "global"/"config" keyword layout above.
+		return filepath.Join(trimmed, "dbs"), filepath.Join(trimmed, "config.yaml"), nil
+	}
+}
+
 // GenerateConfigFile writes a template to targetPath, creating parent directories as needed.
 func GenerateConfigFile(targetPath string, templateType string, force bool) error {
 	if !force {
