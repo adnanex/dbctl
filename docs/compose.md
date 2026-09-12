@@ -6,7 +6,7 @@
 
 ## Auto-Generate from Config
 
-`dbctl up` reads your `config.yaml` and generates a complete `docker-compose.dbctl.yml` with all configured database engines, then starts the containers.
+`dbctl up` reads your `dbctl.yaml` and generates a complete `docker-compose.dbctl.yml` with all configured database engines, then starts the containers.
 
 ### Basic Usage
 
@@ -29,7 +29,7 @@ dbctl up --output ./infra/docker-compose.yml
 For a config with MySQL and PostgreSQL targets:
 
 ```yaml
-# config.yaml
+# dbctl.yaml
 targets:
   - driver: mysql
     port: 3306
@@ -98,12 +98,12 @@ volumes:
 
 ## Full Database Stack (`dbctl init stack`)
 
-`dbctl up` generates one compose file per **project**, scoped to the drivers in that project's `config.yaml`. `dbctl init stack` is different: it scaffolds one full, standalone Docker Compose stack — MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, and Typesense — meant to be shared across every project on the machine (or per-repo, your choice).
+`dbctl up` generates one compose file per **project**, scoped to the drivers in that project's `dbctl.yaml`. `dbctl init stack` is different: it scaffolds one full, standalone Docker Compose stack — MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, and Typesense — meant to be shared across every project on the machine (or per-repo, your choice).
 
 ### Usage
 
 ```bash
-# ./dbs/docker-compose.yml + ./config.yaml — interactive engine picker in a TTY,
+# ./.dbctl/dbs/docker-compose.yml + ./.dbctl/config.yaml — interactive engine picker in a TTY,
 # full stack by default in non-interactive contexts (CI, piped output)
 dbctl init stack
 
@@ -119,14 +119,14 @@ dbctl init stack /path/to/dest
 # Skip the interactive picker
 dbctl init stack --engines mysql,postgres,redis
 
-# Regenerate an existing docker-compose.yml (config.yaml is merged regardless of this flag)
+# Regenerate an existing docker-compose.yml (its config.yaml is merged regardless of this flag)
 dbctl init stack global --force
 
 # Equivalent shorthand on the base command
 dbctl init --stack --engines mysql,redis
 ```
 
-The generated `config.yaml` wires the driver-backed engines (MySQL, PostgreSQL, MongoDB) to the new compose file automatically:
+The generated `config.yaml` (`defaults:` format) wires the driver-backed engines (MySQL, PostgreSQL, MongoDB) to the new compose file automatically:
 
 ```yaml
 defaults:
@@ -144,13 +144,16 @@ Redis, RabbitMQ, Kafka, NATS, and Typesense are scaffolded as containers but hav
 
 ### `dbctl init` vs. `dbctl init stack`, and how they interact with `config.yaml`
 
-`dbctl init [dest]` scaffolds a fresh, standalone `config.yaml` from a static template (`local`/`global`/`minimal`) — full host/port/admin credentials, refuses to touch an existing file without `--force`, and `--force` there means "replace the whole file."
+These two commands write two structurally different kinds of file, kept apart by both name and location so they never collide:
 
-`dbctl init stack [dest]` writes a **matching** `config.yaml` at the same conventional path (`~/.dbctl/config.yaml` for `global`, `./config.yaml` for `local`) — but only to wire `container.compose_file`/`service` into the driver-backed entries. To avoid the two commands clobbering each other's contributions when run against the same file, `dbctl init stack` never does a blind overwrite of `config.yaml`:
+- **`dbctl init [dest]`** scaffolds the **project driver config** (`targets:`/`driver:` format) at `./dbctl.yaml` by default — full host/port/admin credentials, refuses to touch an existing file without `--force`, and `--force` there means "replace the whole file."
+- **`dbctl init stack [dest]`** writes a **global-style `defaults:` config** — at `./.dbctl/config.yaml` for the local/default destination, `~/.dbctl/config.yaml` for `global`, etc. — wiring `container.compose_file`/`service` into the driver-backed entries.
 
-- If the file doesn't exist yet, it's written fresh.
-- If it already exists in the global `defaults:` format (e.g. from `dbctl init global`), only the `container.compose_file`/`service` fields for the selected engines are added or updated — host/port/admin, other drivers, comments, and anything else are left untouched. This happens automatically; `--force` isn't needed and doesn't change this behavior.
-- If it exists in a project `targets:`/single-`driver:` format (e.g. from `dbctl init local`/`minimal`) that can't be safely merged, the command errors with the exact `compose_file` path to wire up by hand — it will never guess and overwrite a project config, even with `--force`.
+For `global`/`project`/`config` destinations, both commands *can* legitimately target the same `defaults:`-format file (e.g. running `dbctl init global` then later `dbctl init stack global`). To avoid one clobbering the other's contributions, `dbctl init stack` never does a blind overwrite of that file:
+
+- If it doesn't exist yet, it's written fresh.
+- If it already exists in the global `defaults:` format, only the `container.compose_file`/`service` fields for the selected engines are added or updated — host/port/admin, other drivers, comments, and anything else are left untouched. This happens automatically; `--force` isn't needed and doesn't change this behavior.
+- If it exists in a project `targets:`/single-`driver:` format that can't be safely merged, the command errors with the exact `compose_file` path to wire up by hand — it will never guess and overwrite a project config, even with `--force`.
 
 `--force` on `dbctl init stack` only ever controls whether an existing `docker-compose.yml` gets regenerated.
 
@@ -195,11 +198,12 @@ Because the network name is fixed and not tied to the stack directory, only run 
 
 `ResolveComposeFile` (in `pkg/container`) is used by `dbctl up`, `dbctl status`, and per-target container checks to find the compose file to operate on, in this order:
 
-1. An explicit path — e.g. a target's `container.compose_file` in `config.yaml` (after `${VAR}` expansion)
+1. An explicit path — e.g. a target's `container.compose_file` in your config (after `${VAR}` expansion)
 2. The `DBCTL_COMPOSE_FILE` environment variable (a file path)
 3. The `DBCTL_STACK` environment variable (a directory — checked for `docker-compose.yml`/`.yaml`/`compose.yml`/`.yaml`)
-4. `~/.dbctl/dbs/docker-compose.yml`, `~/.config/dbctl/dbs/docker-compose.yml`
-5. `./dbs/docker-compose.yml`, `./docker-compose.yml`, `./compose.yml`, `./compose.yaml`
+4. `./.dbctl/dbs/docker-compose.yml` (project-local)
+5. `~/.dbctl/dbs/docker-compose.yml`, `~/.config/dbctl/dbs/docker-compose.yml`
+6. `./dbs/docker-compose.yml`, `./docker-compose.yml`, `./compose.yml`, `./compose.yaml`
 
 `dbctl up` uses this resolution (when no `--compose` flag is passed) to prefer an already-discovered stack over generating a fresh `docker-compose.dbctl.yml` from config — so once a host stack exists and `DBCTL_COMPOSE_FILE` is exported, `dbctl up` in any project just starts/reuses it.
 
@@ -213,12 +217,12 @@ If you prefer to maintain your own Docker Compose file, use the `--compose` flag
 # Use your own compose file
 dbctl up --compose ./docker-compose.yml
 
-# Or per-target in config.yaml
+# Or per-target in dbctl.yaml
 ```
 
 ### Per-Target Container Config
 
-You can configure container settings directly in your `config.yaml` per target:
+You can configure container settings directly in your `dbctl.yaml` per target:
 
 ```yaml
 targets:

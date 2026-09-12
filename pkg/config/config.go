@@ -244,7 +244,10 @@ func LoadConfig(path string, envMap map[string]string) (*Config, error) {
 	return nil, fmt.Errorf("invalid config format in %s: must specify 'driver' or 'targets'", path)
 }
 
-// FindGlobalConfigFile searches for the global configuration file.
+// FindGlobalConfigFile searches for the global "defaults:" configuration file,
+// checking (in order): an explicit path, DBCTL_GLOBAL_CONFIG, a project-local
+// ./.dbctl/config.yaml (lets a repo commit shared, non-secret defaults), then
+// the host-wide ~/.dbctl/ and ~/.config/dbctl/ locations.
 func FindGlobalConfigFile(explicitPath string) string {
 	if explicitPath != "" {
 		if _, err := os.Stat(explicitPath); err == nil {
@@ -256,6 +259,16 @@ func FindGlobalConfigFile(explicitPath string) string {
 	if envPath := os.Getenv("DBCTL_GLOBAL_CONFIG"); envPath != "" {
 		if _, err := os.Stat(envPath); err == nil {
 			return envPath
+		}
+	}
+
+	localCandidates := []string{
+		filepath.Join(".dbctl", "config.yaml"),
+		filepath.Join(".dbctl", "config.yml"),
+	}
+	for _, c := range localCandidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
 		}
 	}
 

@@ -70,6 +70,8 @@ export DBCTL_COMPOSE_FILE="$HOME/.dbctl/dbs/docker-compose.yml"
 
 Every project's `dbctl up`/`dbctl status` will now discover and reuse this stack automatically — see [Docker Compose Guide → Host Stack Discovery](compose.md#host-stack-discovery).
 
+Prefer defaults scoped to one repo instead of the whole host? Use `dbctl init project` / `dbctl init stack` (no destination) instead of `global` — both write to `./.dbctl/` in the project root, so the config can be committed and shared with the rest of the team.
+
 ### Step B: Initialize a Project
 In any project repository, run:
 
@@ -78,7 +80,7 @@ In any project repository, run:
 dbctl init minimal
 ```
 
-This creates a clean `./config.yaml`:
+This creates a clean `./dbctl.yaml`:
 
 ```yaml
 driver: mysql
@@ -99,23 +101,23 @@ users:
 
 ### Standard Run
 ```bash
-dbctl -config config.yaml
-# Or shorthand:
-dbctl -c config.yaml
+dbctl -config dbctl.yaml
+# Or shorthand (dbctl.yaml is also the default, so -c can be omitted):
+dbctl -c dbctl.yaml
 ```
 
 ### Dry-Run Mode (Simulation)
 Inspect what `dbctl` would do without making changes to the database:
 ```bash
-dbctl -dry-run -c config.yaml
+dbctl -dry-run -c dbctl.yaml
 ```
 
 ### Passing Environment Files
 Load runtime variables dynamically:
 ```bash
-dbctl -env .env.mysql -c config.yaml
+dbctl -env .env.mysql -c dbctl.yaml
 ```
 You can pass multiple files; later files take precedence:
 ```bash
-dbctl -env .env.mysql -e .env.secrets -c config.yaml
+dbctl -env .env.mysql -e .env.secrets -c dbctl.yaml
 ```

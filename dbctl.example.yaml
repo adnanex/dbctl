@@ -1,4 +1,4 @@
-# Example configuration for dbctl
+# Example project driver config for dbctl — save as ./dbctl.yaml
 targets:
   - driver: mysql
     host: "127.0.0.1"

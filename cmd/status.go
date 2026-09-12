@@ -23,7 +23,7 @@ var statusCmd = &cobra.Command{
 	Short: "Show status of configured database targets",
 	Long:  strings.TrimRight(statusLong, "\n"),
 	Example: `  dbctl status                 # Table view of all targets
-  dbctl status -c config.yaml  # Check specific config`,
+  dbctl status -c my-config.yaml  # Check specific config`,
 	RunE: runStatus,
 }
 
@@ -32,10 +32,7 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	configFile := cfgFile
-	if configFile == "" {
-		configFile = "config.yaml"
-	}
+	configFile := config.FindProjectConfigFile(cfgFile)
 
 	cfg, err := config.LoadConfig(configFile, nil)
 	if err != nil {

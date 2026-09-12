@@ -22,7 +22,7 @@ Instead of writing custom shell scripts or executing brittle `mysql -u root` one
 
 ### Core Highlights
 
-- **Zero-Admin Project Configs**: Set host defaults once in `~/.dbctl/config.yaml`. Project repositories never need to check in root passwords.
+- **Zero-Admin Project Configs**: Set host defaults once in `~/.dbctl/config.yaml` (or commit a project-local `./.dbctl/config.yaml`). Project repositories never need to check in root passwords.
 - **Full Database Stack Scaffolding**: `dbctl init stack` generates a complete multi-engine `docker-compose.yml` (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense) with healthchecks, persistent volumes, and a shared Docker network other projects can join.
 - **Host Stack Discovery**: Any project on the machine auto-discovers a shared host-wide database stack via `DBCTL_COMPOSE_FILE` / `DBCTL_STACK` or well-known paths (`~/.dbctl/dbs`, `./dbs`) — no per-project compose file needed.
 - **Docker Compose Generation**: Automatically generates `docker-compose.yml` from your config and starts containers with `dbctl up`.
@@ -99,7 +99,7 @@ In any project repository, generate a minimal configuration:
 dbctl init minimal
 ```
 
-This creates `./config.yaml`:
+This creates `./dbctl.yaml`:
 
 ```yaml
 driver: mysql
@@ -130,7 +130,7 @@ Output:
 ```text
 INFO dbctl: Loading global configuration path=~/.dbctl/config.yaml
 INFO dbctl: Loaded driver defaults from global config count=3
-INFO dbctl: Loading project configuration path=config.yaml
+INFO dbctl: Loading project configuration path=dbctl.yaml
 
 ── [1/1]  mysql  on 127.0.0.1:3306
 INFO dbctl: Connecting to database driver=mysql host=127.0.0.1 port=3306 admin=root
@@ -153,7 +153,7 @@ INFO dbctl: ✓ Successfully provisioned 1/1 database target(s)
 | `dbctl provision` | Provision databases, users, and permissions from config |
 | `dbctl up` | Generate Docker Compose and start database containers |
 | `dbctl down` | Stop database containers |
-| `dbctl init [dest]` | Scaffold configuration file (`global`, `minimal`, `local`, `<path>`) |
+| `dbctl init [dest]` | Scaffold configuration file (`global`, `project`, `minimal`, `local`, `<path>`) |
 | `dbctl init stack [dest]` | Scaffold a full database stack (`docker-compose.yml` + matching config) |
 | `dbctl status` | Show status of configured database targets |
 | `dbctl version` | Print version, commit, build date, and Go info |
@@ -163,7 +163,7 @@ INFO dbctl: ✓ Successfully provisioned 1/1 database target(s)
 
 | Flag | Shorthand | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--config <path>` | `-c` | `config.yaml` | Path to YAML configuration file |
+| `--config <path>` | `-c` | `dbctl.yaml` | Path to YAML configuration file |
 | `--global-config <path>` | — | Auto-detected | Path to global host configuration (`~/.dbctl/config.yaml`) |
 | `--env <path>` | `-e` | — | Path to `.env` file (can be repeated) |
 | `--skip-container` | — | `false` | Skip automatic container checking and startup |
@@ -196,7 +196,7 @@ dbctl down --volumes
 ### Full Database Stack Commands
 
 ```bash
-# Scaffold ./dbs/docker-compose.yml + ./config.yaml (interactive engine picker in a TTY)
+# Scaffold ./.dbctl/dbs/docker-compose.yml + ./.dbctl/config.yaml (interactive engine picker in a TTY)
 dbctl init stack
 
 # Scaffold at ~/.dbctl/dbs/docker-compose.yml + ~/.dbctl/config.yaml
@@ -210,12 +210,17 @@ dbctl init stack --engines mysql,postgres,redis
 
 `dbctl` resolves which Docker Compose file to use (for `up`, `down`, `status`, and per-target container checks) in this order:
 
-1. An explicitly configured `container.compose_file` in `config.yaml`
+1. An explicitly configured `container.compose_file` in your config
 2. The `DBCTL_COMPOSE_FILE` (file) or `DBCTL_STACK` (directory) environment variables
-3. `~/.dbctl/dbs/docker-compose.yml`, `~/.config/dbctl/dbs/docker-compose.yml`
-4. `./dbs/docker-compose.yml`, `./docker-compose.yml`
+3. `./.dbctl/dbs/docker-compose.yml` (project-local)
+4. `~/.dbctl/dbs/docker-compose.yml`, `~/.config/dbctl/dbs/docker-compose.yml`
+5. `./dbs/docker-compose.yml`, `./docker-compose.yml`
 
 This means any project on a machine with `DBCTL_COMPOSE_FILE` exported (or a stack scaffolded at one of the well-known paths above) transparently reuses that shared stack.
+
+### Project Config Discovery
+
+The project driver config (`targets:`/`driver:`) defaults to `./dbctl.yaml` — not the generic `config.yaml`, which too easily collides with an unrelated file another tool already put in the project. Global-style `defaults:` config (host/port/admin, container wiring) is looked up separately, checking `./.dbctl/config.yaml` before `~/.dbctl/config.yaml`/`~/.config/dbctl/config.yaml` — so a repo can commit shared, non-secret defaults without needing host-wide setup. `dbctl init project` scaffolds that file.
 
 ---
 

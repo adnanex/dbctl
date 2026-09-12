@@ -1,6 +1,7 @@
-# Minimal Project Configuration
+# Minimal Project Configuration — save as ./dbctl.yaml
 # Notice: NO admin credentials or host/port needed!
-# They are automatically inherited from ~/.dbctl/config.yaml for the 'mysql' driver.
+# They are automatically inherited from ./.dbctl/config.yaml, ~/.dbctl/config.yaml,
+# or ~/.config/dbctl/config.yaml for the 'mysql' driver.
 
 driver: mysql
 

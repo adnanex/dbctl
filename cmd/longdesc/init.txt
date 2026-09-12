@@ -1,8 +1,10 @@
 Generate a template configuration file for dbctl.
 
 Destinations:
-  local / .       Create ./config.yaml (default)
-  global / ~      Create ~/.dbctl/config.yaml
+  local / .        Create ./dbctl.yaml (default)
+  project / .dbctl Create ./.dbctl/config.yaml (project-local defaults, shares the
+                   "defaults:" format with global — commit non-secret wiring to the repo)
+  global / ~       Create ~/.dbctl/config.yaml
   config / .config Create ~/.config/dbctl/config.yaml
-  minimal         Create a minimal ./config.yaml (no admin credentials needed)
-  <filepath>      Create template at a custom filepath
+  minimal          Create a minimal ./dbctl.yaml (no admin credentials needed)
+  <filepath>       Create template at a custom filepath

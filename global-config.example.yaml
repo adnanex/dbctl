@@ -1,7 +1,8 @@
 # Global dbctl Configuration
-# Place this at ~/.dbctl/config.yaml or ~/.config/dbctl/config.yaml
-# Any project running `dbctl` will automatically inherit these defaults
-# for the specified driver, so project repos never need to check in root passwords.
+# Place this at ./.dbctl/config.yaml (project-local), ~/.dbctl/config.yaml, or
+# ~/.config/dbctl/config.yaml. Any project running `dbctl` will automatically
+# inherit these defaults for the specified driver, so project repos never need
+# to check in root passwords.
 
 defaults:
   mysql:
@@ -13,7 +14,7 @@ defaults:
 
     # Optional: Automatically start container if not running
     container:
-      compose_file: "${DOCKER_COMPOSE_FILE:-/home/adnanex/workspaces/companies/stacks/dbs/docker-compose.yml}"
+      compose_file: "${DBCTL_COMPOSE_FILE:-}" # or a fixed path, e.g. "${DBCTL_COMPOSE_FILE:-/home/you/dbs/docker-compose.yml}"
       service: "mysql"
       # Or standalone docker:
       # image: "mysql:8.0-debian"

@@ -22,12 +22,13 @@ var initCmd = &cobra.Command{
 	Use:   "init [destination]",
 	Short: "Scaffold a dbctl configuration file",
 	Long:  strings.TrimRight(initLong, "\n"),
-	Example: `  dbctl init                  # Create ./config.yaml with local template
+	Example: `  dbctl init                  # Create ./dbctl.yaml with local template
+  dbctl init project          # Create ./.dbctl/config.yaml with project-local defaults
   dbctl init global           # Create ~/.dbctl/config.yaml with global defaults
-  dbctl init minimal          # Create ./config.yaml with minimal zero-admin template
+  dbctl init minimal          # Create ./dbctl.yaml with minimal zero-admin template
   dbctl init ~/my-config.yaml # Create template at a custom path
   dbctl init global --force   # Overwrite existing global config
-  dbctl init stack            # Scaffold a full database stack (./dbs/docker-compose.yml)
+  dbctl init stack            # Scaffold a full database stack (./.dbctl/dbs/docker-compose.yml)
   dbctl init stack global     # Scaffold the stack at ~/.dbctl/dbs/docker-compose.yml`,
 	Args:    cobra.MaximumNArgs(1),
 	Aliases: []string{"scaffold", "create-config"},
@@ -37,7 +38,7 @@ var initCmd = &cobra.Command{
 var initStackCmd = &cobra.Command{
 	Use:   "stack [destination]",
 	Short: "Scaffold a full database stack (Docker Compose) and matching config",
-	Example: `  dbctl init stack                     # ./dbs/docker-compose.yml + ./config.yaml
+	Example: `  dbctl init stack                     # ./.dbctl/dbs/docker-compose.yml + ./.dbctl/config.yaml
   dbctl init stack global              # ~/.dbctl/dbs/docker-compose.yml + ~/.dbctl/config.yaml
   dbctl init stack --engines mysql,redis
   dbctl init stack global --force`,

@@ -81,10 +81,7 @@ func runUp(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load config to generate compose
-	configFile := cfgFile
-	if configFile == "" {
-		configFile = "config.yaml"
-	}
+	configFile := config.FindProjectConfigFile(cfgFile)
 
 	if _, err := os.Stat(configFile); os.IsNotExist(err) {
 		return fmt.Errorf("config file not found: %s (run 'dbctl init' first)", configFile)

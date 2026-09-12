@@ -28,7 +28,7 @@ var provisionCmd = &cobra.Command{
 	Use:   "provision",
 	Short: "Provision databases, users, and permissions from config",
 	Long:  strings.TrimRight(provisionLong, "\n"),
-	Example: `  dbctl provision                          # Use ./config.yaml
+	Example: `  dbctl provision                          # Use ./dbctl.yaml
   dbctl provision -c my-config.yaml        # Specify config file
   dbctl provision --dry-run                # Simulate without changes
   dbctl provision -e .env.mysql -e .env    # Load env files
@@ -58,10 +58,7 @@ func runProvision(cmd *cobra.Command, args []string) error {
 	globalConfigPath := viper.GetString("global-config")
 
 	// Resolve config file path
-	configFile := viper.GetString("config")
-	if configFile == "" {
-		configFile = "config.yaml"
-	}
+	configFile := config.FindProjectConfigFile(viper.GetString("config"))
 
 	// Auto-detect .env file
 	if len(envFiles) == 0 {

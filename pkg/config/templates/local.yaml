@@ -1,6 +1,6 @@
 # Database Configuration (Project-Level) - dbctl
-# If global defaults are configured in ~/.dbctl/config.yaml,
-# you can omit 'admin' credentials and connection settings.
+# If global defaults are configured in ./.dbctl/config.yaml, ~/.dbctl/config.yaml,
+# or ~/.config/dbctl/config.yaml, you can omit 'admin' credentials and connection settings.
 
 targets:
   - driver: mysql

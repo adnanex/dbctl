@@ -17,16 +17,31 @@ var LocalTemplate string
 //go:embed templates/minimal.yaml
 var MinimalTemplate string
 
+// projectConfigName is the default filename for a project's own driver config
+// ("targets:" or a single root "driver:"). It intentionally isn't the generic
+// "config.yaml" — that name collides with unrelated config.yaml files many
+// other tools already use in a project, silently mixing up or overwriting them.
+const projectConfigName = "dbctl.yaml"
+
 // ResolveInitPath resolves a destination path based on keywords or explicit path.
+//
+// "local"/"minimal" (and no destination) scaffold a project driver config
+// ("targets:" format) at ./dbctl.yaml. "project" (and ".dbctl") scaffold a
+// project-local "defaults:" config at ./.dbctl/config.yaml instead — the
+// project-scoped equivalent of "global", useful for committing shared,
+// non-secret defaults (service names, compose_file wiring) to the repo. See
+// FindGlobalConfigFile, which checks ./.dbctl/config.yaml before ~/.dbctl/.
 func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error) {
 	home, _ := os.UserHomeDir()
 
 	trimmed := strings.TrimSpace(dest)
 	switch strings.ToLower(trimmed) {
-	case "", "local", "project", "./", ".":
-		return "config.yaml", false, nil
+	case "", "local", "./", ".":
+		return projectConfigName, false, nil
 	case "minimal":
-		return "config.yaml", false, nil
+		return projectConfigName, false, nil
+	case "project", ".dbctl", "./.dbctl":
+		return filepath.Join(".dbctl", "config.yaml"), true, nil
 	case "global", "~", "~/", "~/.dbctl":
 		if home == "" {
 			return "", true, fmt.Errorf("unable to determine user home directory")
@@ -49,15 +64,37 @@ func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error
 	}
 }
 
+// FindProjectConfigFile resolves the project driver config path, checking (in
+// order): an explicit path, ./dbctl.yaml, ./dbctl.yml. If none exist, it
+// returns the default name so callers can produce a sensible "not found" error.
+func FindProjectConfigFile(explicitPath string) string {
+	if explicitPath != "" {
+		return explicitPath
+	}
+
+	for _, c := range []string{projectConfigName, "dbctl.yml"} {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+
+	return projectConfigName
+}
+
 // ResolveStackPath resolves a destination directory for a database stack (docker-compose.yml)
 // and the matching config.yaml path, based on keywords or an explicit path.
+//
+// The stack's companion config.yaml is always "defaults:" format (see
+// GenerateStackConfig), so unlike ResolveInitPath, "local" isn't the bare
+// project driver config's path — it resolves to ./.dbctl/, same as "project",
+// to avoid colliding with ./dbctl.yaml's incompatible "targets:" format.
 func ResolveStackPath(dest string) (stackDir string, configPath string, err error) {
 	home, _ := os.UserHomeDir()
 
 	trimmed := strings.TrimSpace(dest)
 	switch strings.ToLower(trimmed) {
-	case "", "local", "project", "./", ".":
-		return "dbs", "config.yaml", nil
+	case "", "local", "./", ".", "project", ".dbctl", "./.dbctl":
+		return filepath.Join(".dbctl", "dbs"), filepath.Join(".dbctl", "config.yaml"), nil
 	case "global", "~", "~/", "~/.dbctl":
 		if home == "" {
 			return "", "", fmt.Errorf("unable to determine user home directory")

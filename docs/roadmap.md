@@ -39,12 +39,12 @@ Beautiful terminal output using:
 ### Full Database Stack Scaffolding (`dbctl init stack`)
 - Generates a complete multi-engine `docker-compose.yml` — MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka (KRaft), NATS (JetStream), Typesense
 - `--engines` flag to pick a subset non-interactively; interactive `huh` multi-select picker when run in a TTY without it
-- Writes a matching `config.yaml` wiring driver-backed engines to the generated compose file
-- Destinations: `local` (`./dbs/`), `global` (`~/.dbctl/dbs/`), `config` (`~/.config/dbctl/dbs/`), or an explicit path
+- Writes a matching `config.yaml` (`defaults:` format) wiring driver-backed engines to the generated compose file
+- Destinations: `local`/`project` (`./.dbctl/dbs/`), `global` (`~/.dbctl/dbs/`), `config` (`~/.config/dbctl/dbs/`), or an explicit path
 - Engine definitions (images, ports, env vars, healthchecks) live in an embedded Compose template (`pkg/compose/templates/stack/`), not hardcoded in Go — `dbctl init stack --engines ...` filters it down to the requested services
 
 ### Host Stack Discovery (`ResolveComposeFile`)
-- `dbctl up`, `dbctl status`, and per-target container checks resolve a shared compose file via (in order): explicit `container.compose_file` → `DBCTL_COMPOSE_FILE`/`DBCTL_STACK` env vars → `~/.dbctl/dbs/` or `~/.config/dbctl/dbs/` → `./dbs/` or `./docker-compose.yml`
+- `dbctl up`, `dbctl status`, and per-target container checks resolve a shared compose file via (in order): explicit `container.compose_file` → `DBCTL_COMPOSE_FILE`/`DBCTL_STACK` env vars → `./.dbctl/dbs/` → `~/.dbctl/dbs/` or `~/.config/dbctl/dbs/` → `./dbs/` or `./docker-compose.yml`
 - `dbctl up` prefers a discovered stack over generating a fresh compose file from config
 - Container status checks now use `docker compose ps -q --status running <service>` instead of substring-matching table output
 
@@ -56,6 +56,14 @@ Beautiful terminal output using:
 - `dbctl init stack` no longer overwrites an existing `config.yaml` wholesale — it merges just the `container.compose_file`/`service` fields into existing global `defaults:` entries, preserving host/port/admin and everything else `dbctl init` wrote
 - Merging is automatic (no `--force` needed) when the existing file is in the global `defaults:` format; it refuses and reports a clear error (never overwrites) when the file is a project `targets:`/single-`driver:` config
 - `--force` on `dbctl init stack` now only governs regenerating an existing `docker-compose.yml`
+
+### Renamed Project Config & Project-Local `.dbctl/` Convention
+- The project driver config's default filename changed from the generic `config.yaml` to `dbctl.yaml` (`pkg/config.FindProjectConfigFile`), since `config.yaml` too easily collides with an unrelated file already present in a project
+- New `dbctl init project` (aliases: `.dbctl`, `./.dbctl`) scaffolds a project-local `defaults:` config at `./.dbctl/config.yaml` — the project-scoped equivalent of `dbctl init global`, so a repo can commit shared, non-secret defaults
+- `FindGlobalConfigFile` now checks `./.dbctl/config.yaml` before the host-wide `~/.dbctl/`/`~/.config/dbctl/` locations
+- `dbctl init stack`'s local/default destination moved to `./.dbctl/dbs/` + `./.dbctl/config.yaml` (previously `./dbs/` + `./config.yaml`), so it can never collide with the project driver config even by coincidence
+- `ResolveComposeFile` checks `./.dbctl/dbs/` before the plain `./dbs/`
+- No backward compatibility shim: the old `./config.yaml` name/location is no longer searched
 
 ---
 
@@ -126,15 +134,15 @@ admin:
 
 ### 4. Drift Detection (`dbctl diff`)
 
-Check if the real database has drifted from what is declared in `config.yaml` without changing anything:
+Check if the real database has drifted from what is declared in `dbctl.yaml` without changing anything:
 
 ```bash
-dbctl diff -c config.yaml
+dbctl diff -c dbctl.yaml
 ```
 
 **Output**:
 ```text
-[dbctl] Comparing live database (127.0.0.1:3306) with config.yaml:
+[dbctl] Comparing live database (127.0.0.1:3306) with dbctl.yaml:
   [~] User 'app_user'@'%':
       - Live Privileges:   [SELECT, INSERT]
       - Desired Privileges: [SELECT, INSERT, UPDATE, DELETE]
@@ -250,7 +258,7 @@ Provide a pre-built GitHub Action for CI/CD pipelines:
 - name: Provision Databases
   uses: adnanex/dbctl-action@v1
   with:
-    config: ./config.yaml
+    config: ./dbctl.yaml
     env-file: .env.ci
 ```
 
@@ -271,10 +279,10 @@ Provide a pre-built GitHub Action for CI/CD pipelines:
 
 ### 14. Config Validation & Linting (`dbctl validate`)
 
-Catch mistakes in `config.yaml` before they hit a live database — invalid driver names, duplicate database/user names, missing required fields, malformed `${VAR}` interpolation — without needing Docker or network access.
+Catch mistakes in `dbctl.yaml` before they hit a live database — invalid driver names, duplicate database/user names, missing required fields, malformed `${VAR}` interpolation — without needing Docker or network access.
 
 ```bash
-dbctl validate                  # Validate ./config.yaml
+dbctl validate                  # Validate ./dbctl.yaml
 dbctl validate -c staging.yaml  # Validate a specific file
 dbctl validate --json           # Machine-readable output for CI
 ```
@@ -305,7 +313,7 @@ dbctl doctor
 
 ### 16. Modular / Multi-File Configs (`include:`)
 
-Large teams and monorepos often need one target per service. Let `config.yaml` compose smaller files instead of one growing monolith:
+Large teams and monorepos often need one target per service. Let `dbctl.yaml` compose smaller files instead of one growing monolith:
 
 ```yaml
 include:
@@ -322,10 +330,10 @@ include:
 
 ### 17. Reverse Introspection (`dbctl introspect`)
 
-Onboard an existing, hand-built database onto dbctl by generating a starting `config.yaml` from what's actually running — instead of hand-transcribing databases, users, and grants.
+Onboard an existing, hand-built database onto dbctl by generating a starting `dbctl.yaml` from what's actually running — instead of hand-transcribing databases, users, and grants.
 
 ```bash
-dbctl introspect mysql --host 127.0.0.1 --port 3306 --admin-user root > config.yaml
+dbctl introspect mysql --host 127.0.0.1 --port 3306 --admin-user root > dbctl.yaml
 ```
 
 **Implementation**:
@@ -341,20 +349,20 @@ dbctl introspect mysql --host 127.0.0.1 --port 3306 --admin-user root > config.y
 dbctl init --interactive
 ```
 
-Walks through driver selection, host/port, admin credentials, and database/user definitions with form validation, then writes the resulting `config.yaml`.
+Walks through driver selection, host/port, admin credentials, and database/user definitions with form validation, then writes the resulting `dbctl.yaml`.
 
 ---
 
 ### 19. Watch Mode (`--watch`)
 
-Tighten the local dev loop by re-provisioning automatically whenever `config.yaml` changes, instead of re-running the command by hand after every edit:
+Tighten the local dev loop by re-provisioning automatically whenever `dbctl.yaml` changes, instead of re-running the command by hand after every edit:
 
 ```bash
 dbctl provision --watch
 ```
 
 ```text
-[dbctl] Watching config.yaml for changes...
+[dbctl] Watching dbctl.yaml for changes...
 [dbctl] Change detected, re-provisioning...
 ```
 
@@ -362,11 +370,11 @@ dbctl provision --watch
 
 ### 20. Encrypted Secrets at Rest (`dbctl config encrypt` / `decrypt`)
 
-A lighter-weight alternative to full secret-manager integrations (#3): encrypt just the sensitive fields of `config.yaml` in place using `age` or a SOPS-compatible format, so the file is safe to commit as-is.
+A lighter-weight alternative to full secret-manager integrations (#3): encrypt just the sensitive fields of `dbctl.yaml` in place using `age` or a SOPS-compatible format, so the file is safe to commit as-is.
 
 ```bash
-dbctl config encrypt config.yaml   # Encrypts admin/user passwords in place
-dbctl config decrypt config.yaml   # Decrypts for local editing
+dbctl config encrypt dbctl.yaml   # Encrypts admin/user passwords in place
+dbctl config decrypt dbctl.yaml   # Decrypts for local editing
 ```
 
 `dbctl provision` decrypts transparently at load time given `DBCTL_AGE_KEY` (or an equivalent key file).

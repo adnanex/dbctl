@@ -1,5 +1,5 @@
 # Global dbctl Configuration
-# Default locations: ~/.dbctl/config.yaml or ~/.config/dbctl/config.yaml
+# Default locations: ./.dbctl/config.yaml (project-local), ~/.dbctl/config.yaml, or ~/.config/dbctl/config.yaml
 # Projects in this host can omit admin credentials and inherit these defaults.
 
 defaults:

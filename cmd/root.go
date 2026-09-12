@@ -39,7 +39,7 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Persistent flags — available to all subcommands
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "path to YAML configuration file (default: config.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "path to YAML configuration file (default: ./dbctl.yaml or ./.dbctl/config.yaml)")
 	rootCmd.PersistentFlags().String("global-config", "", "path to global configuration file (default: auto-discovers ~/.dbctl/config.yaml)")
 	rootCmd.PersistentFlags().StringSliceP("env", "e", nil, "path to .env file (can be repeated)")
 	rootCmd.PersistentFlags().DurationP("timeout", "t", 60_000_000_000, "overall timeout for provisioning operations") // 60s in nanoseconds
@@ -71,8 +71,10 @@ func initConfig() {
 	if cfgFile != "" {
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Search for config file in current directory and home
-		viper.SetConfigName("config")
+		// Search for dbctl.yaml (flag defaults only — not the project driver
+		// config, which pkg/config.FindProjectConfigFile resolves separately)
+		// in the current directory and the home-wide locations.
+		viper.SetConfigName("dbctl")
 		viper.SetConfigType("yaml")
 		viper.AddConfigPath(".")
 

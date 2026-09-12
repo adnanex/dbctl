@@ -1,5 +1,6 @@
 # Minimal Project Configuration (dbctl)
-# Connection settings and admin credentials are automatically inherited from ~/.dbctl/config.yaml
+# Connection settings and admin credentials are automatically inherited from
+# ./.dbctl/config.yaml, ~/.dbctl/config.yaml, or ~/.config/dbctl/config.yaml
 
 driver: mysql
 

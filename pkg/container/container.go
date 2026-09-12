@@ -18,8 +18,9 @@ import (
 // ResolveComposeFile resolves which Docker Compose file to use, checking in order:
 //  1. explicitPath, if it points to an existing file (e.g. a target's configured compose_file)
 //  2. the host environment variables DBCTL_COMPOSE_FILE (a file) or DBCTL_STACK (a directory)
-//  3. user home locations: ~/.dbctl/dbs/docker-compose.yml, ~/.config/dbctl/dbs/docker-compose.yml
-//  4. local locations: ./dbs/docker-compose.yml, ./docker-compose.yml
+//  3. project-local ./.dbctl/dbs/docker-compose.yml
+//  4. user home locations: ~/.dbctl/dbs/docker-compose.yml, ~/.config/dbctl/dbs/docker-compose.yml
+//  5. local locations: ./dbs/docker-compose.yml, ./docker-compose.yml
 //
 // This lets any project seamlessly discover a host-wide database stack without
 // hardcoding its location in project-level configuration.
@@ -44,6 +45,13 @@ func ResolveComposeFile(explicitPath string) string {
 			if _, err := os.Stat(candidate); err == nil {
 				return candidate
 			}
+		}
+	}
+
+	for _, name := range composeFileNames {
+		candidate := filepath.Join(".dbctl", "dbs", name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
 		}
 	}
 
