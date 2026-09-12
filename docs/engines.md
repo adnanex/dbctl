@@ -2,6 +2,8 @@
 
 `dbctl` features a pluggable driver architecture allowing uniform declarations across distinct SQL and NoSQL engines.
 
+This page covers **provisioning drivers** — engines `dbctl provision` can create databases, users, and grants for. Engines below are separate from the **stack engines** available via `dbctl init stack` (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense — see [Docker Compose Guide](compose.md#full-database-stack-dbctl-init-stack)): Redis, RabbitMQ, Kafka, NATS, and Typesense have no database/user/grant concept, so `dbctl` can start/stop them as containers but has no provisioning driver for them.
+
 ---
 
 ## 1. MySQL

@@ -54,6 +54,22 @@ defaults:
       password: "${MYSQL_ROOT_PASSWORD:-rootpassword}"
 ```
 
+### Step A2 (Alternative): Scaffold a Full Local Database Stack
+
+Instead of relying on per-project containers, `dbctl init stack` generates one shared Docker Compose stack (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense) that any project on the machine can reuse:
+
+```bash
+dbctl init stack global
+```
+
+This writes `~/.dbctl/dbs/docker-compose.yml` and a matching `~/.dbctl/config.yaml`. Export the compose file path once (e.g. in `~/.bashrc` or `~/.zshrc`):
+
+```bash
+export DBCTL_COMPOSE_FILE="$HOME/.dbctl/dbs/docker-compose.yml"
+```
+
+Every project's `dbctl up`/`dbctl status` will now discover and reuse this stack automatically — see [Docker Compose Guide → Host Stack Discovery](compose.md#host-stack-discovery).
+
 ### Step B: Initialize a Project
 In any project repository, run:
 

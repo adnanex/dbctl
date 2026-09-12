@@ -228,14 +228,18 @@ func WriteStack(dir string, engines []string, force bool) (string, error) {
 	return abs, nil
 }
 
-// WriteStackConfig writes a config.yaml at configPath referencing composeFilePath for the given engines.
-func WriteStackConfig(configPath string, engines []string, composeFilePath string, force bool) error {
-	if !force {
-		if _, err := os.Stat(configPath); err == nil {
-			return fmt.Errorf("file %s already exists (use --force to overwrite)", configPath)
-		}
-	}
-
+// WriteStackConfig writes (or safely merges into) a config.yaml at configPath,
+// wiring composeFilePath into the driver-backed engines' container settings.
+//
+// If configPath doesn't exist, it's written fresh from GenerateStackConfig. If
+// it already exists in the global "defaults:" format, only the container
+// (compose_file/service) fields of the relevant driver entries are added or
+// updated — host/port/admin/databases/users and unrelated entries are left
+// untouched, so this never collides with settings `dbctl init` wrote. If the
+// existing file is a project-style config ("targets:" or a single root
+// "driver:"), merging isn't possible and this returns an error rather than
+// guessing — such a file should be edited by hand instead.
+func WriteStackConfig(configPath string, engines []string, composeFilePath string) error {
 	dir := filepath.Dir(configPath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -243,10 +247,118 @@ func WriteStackConfig(configPath string, engines []string, composeFilePath strin
 		}
 	}
 
-	content := GenerateStackConfig(engines, composeFilePath)
-	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+	existing, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read %s: %w", configPath, err)
+		}
+		if err := os.WriteFile(configPath, []byte(GenerateStackConfig(engines, composeFilePath)), 0644); err != nil {
+			return fmt.Errorf("failed to write %s: %w", configPath, err)
+		}
+		return nil
+	}
+
+	merged, err := mergeStackConfig(existing, engines, composeFilePath)
+	if err != nil {
+		return fmt.Errorf("%s already exists in a format dbctl can't safely merge into (%v) — wire it up by hand instead: container.compose_file: %q", configPath, err, composeFilePath)
+	}
+
+	if err := os.WriteFile(configPath, merged, 0644); err != nil {
 		return fmt.Errorf("failed to write %s: %w", configPath, err)
 	}
 
 	return nil
+}
+
+// mergeStackConfig merges compose_file/service wiring for the given engines
+// into an existing global-style ("defaults:") config.yaml, preserving every
+// other field. It returns an error if the existing content isn't in that format.
+func mergeStackConfig(existing []byte, engines []string, composeFilePath string) ([]byte, error) {
+	if len(engines) == 0 {
+		engines = StackEngineKeys()
+	}
+
+	var root yaml.Node
+	if err := yaml.Unmarshal(existing, &root); err != nil {
+		return nil, fmt.Errorf("failed to parse existing config: %w", err)
+	}
+
+	var docMapping *yaml.Node
+	if len(root.Content) == 0 {
+		root.Kind = yaml.DocumentNode
+		docMapping = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		root.Content = []*yaml.Node{docMapping}
+	} else {
+		docMapping = root.Content[0]
+		if docMapping.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("existing config is not a YAML mapping")
+		}
+		if _, err := findChild(docMapping, "targets"); err == nil {
+			return nil, fmt.Errorf("existing config uses the project 'targets:' format, not the global 'defaults:' format")
+		}
+		if _, err := findChild(docMapping, "driver"); err == nil {
+			return nil, fmt.Errorf("existing config is a single-target project config, not a global 'defaults:' config")
+		}
+	}
+
+	defaults, err := findOrCreateMappingChild(docMapping, "defaults")
+	if err != nil {
+		return nil, err
+	}
+
+	drivers := engineDrivers()
+	for _, key := range engines {
+		key = strings.ToLower(strings.TrimSpace(key))
+		driver, ok := drivers[key]
+		if !ok || driver == "" {
+			continue
+		}
+
+		driverNode, err := findOrCreateMappingChild(defaults, driver)
+		if err != nil {
+			return nil, err
+		}
+		containerNode, err := findOrCreateMappingChild(driverNode, "container")
+		if err != nil {
+			return nil, err
+		}
+		setScalar(containerNode, "compose_file", composeFilePath)
+		setScalar(containerNode, "service", key)
+	}
+
+	out, err := yaml.Marshal(&root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render merged config: %w", err)
+	}
+	return out, nil
+}
+
+// findOrCreateMappingChild returns the mapping node for key in mapping,
+// creating an empty one and appending it if absent.
+func findOrCreateMappingChild(mapping *yaml.Node, key string) (*yaml.Node, error) {
+	if mapping.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("expected a mapping for %q", key)
+	}
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			if mapping.Content[i+1].Kind != yaml.MappingNode {
+				return nil, fmt.Errorf("expected %q to be a mapping", key)
+			}
+			return mapping.Content[i+1], nil
+		}
+	}
+	child := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, child)
+	return child, nil
+}
+
+// setScalar sets key to value in mapping, updating it in place if present or appending it otherwise.
+func setScalar(mapping *yaml.Node, key, value string) {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			mapping.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
+			return
+		}
+	}
+	mapping.Content = append(mapping.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
 }

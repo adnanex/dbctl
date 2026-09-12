@@ -86,8 +86,14 @@ In modern development environments:
 2. **Container Orchestrator (`pkg/container`)**:
    - Manages container lifecycles transparently via standard `docker` and `docker compose` CLI calls.
    - Probes network ports with backoff until database processes are accepting incoming client handshakes.
+   - `ResolveComposeFile` discovers a host/project-wide compose stack via `DBCTL_COMPOSE_FILE`/`DBCTL_STACK` or well-known paths (`~/.dbctl/dbs`, `./dbs`), so projects don't need their own compose file.
 
-3. **Driver Registry (`pkg/driver`)**:
+3. **Stack Generator (`pkg/compose`)**:
+   - `dbctl up` generates a project-scoped compose file from `config.yaml` targets.
+   - `dbctl init stack` generates a full, standalone multi-engine stack (MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, Typesense) by filtering an embedded Compose template (`pkg/compose/templates/stack/`) — engine definitions live in that template, not hardcoded in Go.
+   - Every stack it generates gets a hashed, directory-unique Compose project name (avoiding cross-stack `down`/`up` collisions) and joins a fixed shared network (`dbctl-net`) that other, unrelated compose projects can attach to.
+
+4. **Driver Registry (`pkg/driver`)**:
    - Provides a unified `Driver` interface:
      - `Connect(ctx, target)`
      - `Close()`

@@ -51,7 +51,7 @@ func init() {
 	initCmd.Flags().Bool("stack", false, "scaffold a full database stack instead of a driver config")
 	initCmd.Flags().StringSlice("engines", nil, fmt.Sprintf("engines to include in the stack (default: full stack — %s)", strings.Join(compose.StackEngineKeys(), ", ")))
 
-	initStackCmd.Flags().BoolP("force", "f", false, "overwrite existing stack files if they exist")
+	initStackCmd.Flags().BoolP("force", "f", false, "overwrite an existing docker-compose.yml (config.yaml is always safely merged, never overwritten by this flag)")
 	initStackCmd.Flags().StringSlice("engines", nil, fmt.Sprintf("engines to include (default: full stack — %s)", strings.Join(compose.StackEngineKeys(), ", ")))
 
 	initCmd.AddCommand(initStackCmd)
@@ -129,7 +129,7 @@ func runInitStack(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := compose.WriteStackConfig(configPath, engines, composeFilePath, force); err != nil {
+	if err := compose.WriteStackConfig(configPath, engines, composeFilePath); err != nil {
 		return err
 	}
 

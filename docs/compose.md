@@ -1,6 +1,6 @@
 # Docker Compose Guide — dbctl
 
-`dbctl` can automatically generate and manage Docker Compose files for your database infrastructure, or use your own custom compose files.
+`dbctl` can automatically generate and manage Docker Compose files for your database infrastructure, or use your own custom compose files. It also supports scaffolding one full, shared database stack (`dbctl init stack`) and auto-discovering it across projects — see [Full Database Stack](#full-database-stack-dbctl-init-stack) and [Host Stack Discovery](#host-stack-discovery) below.
 
 ---
 
@@ -93,6 +93,115 @@ volumes:
 | PostgreSQL | `postgres:16-alpine` | `pg_isready` |
 | MongoDB | `mongo:7` | `mongosh ping` |
 | Redis | `redis:7-alpine` | `redis-cli ping` |
+
+---
+
+## Full Database Stack (`dbctl init stack`)
+
+`dbctl up` generates one compose file per **project**, scoped to the drivers in that project's `config.yaml`. `dbctl init stack` is different: it scaffolds one full, standalone Docker Compose stack — MySQL, PostgreSQL, MongoDB, Redis, RabbitMQ, Kafka, NATS, and Typesense — meant to be shared across every project on the machine (or per-repo, your choice).
+
+### Usage
+
+```bash
+# ./dbs/docker-compose.yml + ./config.yaml — interactive engine picker in a TTY,
+# full stack by default in non-interactive contexts (CI, piped output)
+dbctl init stack
+
+# ~/.dbctl/dbs/docker-compose.yml + ~/.dbctl/config.yaml
+dbctl init stack global
+
+# ~/.config/dbctl/dbs/docker-compose.yml + ~/.config/dbctl/config.yaml
+dbctl init stack config
+
+# A specific directory: <dest>/dbs/docker-compose.yml + <dest>/config.yaml
+dbctl init stack /path/to/dest
+
+# Skip the interactive picker
+dbctl init stack --engines mysql,postgres,redis
+
+# Regenerate an existing docker-compose.yml (config.yaml is merged regardless of this flag)
+dbctl init stack global --force
+
+# Equivalent shorthand on the base command
+dbctl init --stack --engines mysql,redis
+```
+
+The generated `config.yaml` wires the driver-backed engines (MySQL, PostgreSQL, MongoDB) to the new compose file automatically:
+
+```yaml
+defaults:
+  mysql:
+    container:
+      compose_file: "/home/you/.dbctl/dbs/docker-compose.yml"
+      service: "mysql"
+  postgres:
+    container:
+      compose_file: "/home/you/.dbctl/dbs/docker-compose.yml"
+      service: "postgres"
+```
+
+Redis, RabbitMQ, Kafka, NATS, and Typesense are scaffolded as containers but have no dbctl provisioning driver (no database/user/grant concept) — they're started/stopped like the rest of the stack, just not targets for `dbctl provision`.
+
+### `dbctl init` vs. `dbctl init stack`, and how they interact with `config.yaml`
+
+`dbctl init [dest]` scaffolds a fresh, standalone `config.yaml` from a static template (`local`/`global`/`minimal`) — full host/port/admin credentials, refuses to touch an existing file without `--force`, and `--force` there means "replace the whole file."
+
+`dbctl init stack [dest]` writes a **matching** `config.yaml` at the same conventional path (`~/.dbctl/config.yaml` for `global`, `./config.yaml` for `local`) — but only to wire `container.compose_file`/`service` into the driver-backed entries. To avoid the two commands clobbering each other's contributions when run against the same file, `dbctl init stack` never does a blind overwrite of `config.yaml`:
+
+- If the file doesn't exist yet, it's written fresh.
+- If it already exists in the global `defaults:` format (e.g. from `dbctl init global`), only the `container.compose_file`/`service` fields for the selected engines are added or updated — host/port/admin, other drivers, comments, and anything else are left untouched. This happens automatically; `--force` isn't needed and doesn't change this behavior.
+- If it exists in a project `targets:`/single-`driver:` format (e.g. from `dbctl init local`/`minimal`) that can't be safely merged, the command errors with the exact `compose_file` path to wire up by hand — it will never guess and overwrite a project config, even with `--force`.
+
+`--force` on `dbctl init stack` only ever controls whether an existing `docker-compose.yml` gets regenerated.
+
+### Stack Engines
+
+| Engine | Service Key | Default Image | Notes |
+| :--- | :--- | :--- | :--- |
+| MySQL | `mysql` | `mysql:8.0-debian` | Provisioning driver available |
+| PostgreSQL | `postgres` | `postgres:16-alpine` | Provisioning driver available |
+| MongoDB | `mongo` | `mongo:7` | Provisioning driver available |
+| Redis | `redis` | `redis:7-alpine` | Container-only |
+| RabbitMQ | `rabbitmq` | `rabbitmq:3-management-alpine` | Container-only |
+| Kafka | `kafka` | `confluentinc/cp-kafka:7.6.1` | KRaft single-node mode, container-only |
+| NATS | `nats` | `nats:2-alpine` | JetStream enabled, container-only |
+| Typesense | `typesense` | `typesense/typesense:27.1` | Container-only |
+
+Each service gets a healthcheck, a persistent named volume (`dbctl-<engine>-data`), and joins the shared `dbctl-net` network described below. The stack's Compose project name is derived from a hash of the stack directory's absolute path (`dbctl-<hash>`), so two stacks generated in differently-located directories that happen to share a folder name (e.g. two unrelated `dbs/` folders) never collide — `docker compose down` in one can't accidentally stop or remove containers from the other.
+
+The per-engine service definitions (images, ports, env vars, healthchecks) live in `pkg/compose/templates/stack/docker-compose.yml`, embedded into the binary at build time — not hardcoded in Go source. Selecting a subset of engines filters that template down to just the chosen services and their volumes.
+
+### Shared Network (`dbctl-net`)
+
+Every service in the generated stack joins a fixed bridge network named `dbctl-net`, so **other, unrelated Docker Compose projects** can reach these databases by service hostname instead of via host-mapped ports — the same pattern used by hand-maintained infrastructure stacks. From another project's compose file:
+
+```yaml
+services:
+  app:
+    image: my-app:latest
+    environment:
+      DATABASE_URL: "mysql://root:rootpassword@mysql:3306/my_app_db"
+    networks:
+      - dbctl-net
+
+networks:
+  dbctl-net:
+    external: true
+```
+
+Because the network name is fixed and not tied to the stack directory, only run one canonical stack that owns `dbctl-net` at a time (typically the host-global one at `~/.dbctl/dbs`); other projects should always reference it with `external: true` rather than declaring their own `dbctl-net`.
+
+### Host Stack Discovery
+
+`ResolveComposeFile` (in `pkg/container`) is used by `dbctl up`, `dbctl status`, and per-target container checks to find the compose file to operate on, in this order:
+
+1. An explicit path — e.g. a target's `container.compose_file` in `config.yaml` (after `${VAR}` expansion)
+2. The `DBCTL_COMPOSE_FILE` environment variable (a file path)
+3. The `DBCTL_STACK` environment variable (a directory — checked for `docker-compose.yml`/`.yaml`/`compose.yml`/`.yaml`)
+4. `~/.dbctl/dbs/docker-compose.yml`, `~/.config/dbctl/dbs/docker-compose.yml`
+5. `./dbs/docker-compose.yml`, `./docker-compose.yml`, `./compose.yml`, `./compose.yaml`
+
+`dbctl up` uses this resolution (when no `--compose` flag is passed) to prefer an already-discovered stack over generating a fresh `docker-compose.dbctl.yml` from config — so once a host stack exists and `DBCTL_COMPOSE_FILE` is exported, `dbctl up` in any project just starts/reuses it.
 
 ---
 
