@@ -85,6 +85,7 @@ func GenerateStack(engines []string, projectName string) (string, error) {
 		return "", fmt.Errorf("stack template has no services section")
 	}
 	volumes, _ := findChild(root.Content[0], "volumes") // optional
+	networks, _ := findChild(root.Content[0], "networks") // optional, shared by all services
 
 	selected := make(map[string]bool, len(engines))
 	for _, e := range engines {
@@ -105,6 +106,11 @@ func GenerateStack(engines []string, projectName string) (string, error) {
 
 	out := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	appendKV(out, "services", filteredServices)
+
+	if networks != nil {
+		// All services share the same network(s), so pass the section through as-is.
+		appendKV(out, "networks", networks)
+	}
 
 	if volumes != nil {
 		filteredVolumes := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
