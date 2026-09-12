@@ -65,14 +65,23 @@ func ResolveInitPath(dest string) (resolvedPath string, isGlobal bool, err error
 }
 
 // FindProjectConfigFile resolves the project driver config path, checking (in
-// order): an explicit path, ./dbctl.yaml, ./dbctl.yml. If none exist, it
+// order): an explicit path, ./dbctl.yaml, ./dbctl.yml, ./.dbctl/config.yaml,
+// ./.dbctl/config.yml. The .dbctl/ fallback lets a "targets:" config live
+// there too, alongside (or instead of) a "defaults:" block — LoadConfig only
+// reads the "targets" key, so both can coexist in one file. If none exist, it
 // returns the default name so callers can produce a sensible "not found" error.
 func FindProjectConfigFile(explicitPath string) string {
 	if explicitPath != "" {
 		return explicitPath
 	}
 
-	for _, c := range []string{projectConfigName, "dbctl.yml"} {
+	candidates := []string{
+		projectConfigName,
+		"dbctl.yml",
+		filepath.Join(".dbctl", "config.yaml"),
+		filepath.Join(".dbctl", "config.yml"),
+	}
+	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
