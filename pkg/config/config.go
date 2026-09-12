@@ -14,6 +14,16 @@ import (
 // It supports either multiple targets under `targets`, or a single target defined at the root.
 type Config struct {
 	Targets []TargetConfig `yaml:"targets"`
+
+	// Services lists extra Compose service names `dbctl up` should also start
+	// when it reuses an existing (discovered or --compose) compose file —
+	// for container-only engines with no dbctl driver (redis, kafka,
+	// rabbitmq, nats, typesense, ...) that can't be declared as a target: a
+	// target requires a registered driver, and `dbctl provision` fails hard
+	// on one that has none. Has no effect when `dbctl up` generates a fresh
+	// compose file from config, since there's no existing service definition
+	// for a bare name to reuse.
+	Services []string `yaml:"services,omitempty"`
 }
 
 // TargetConfig defines connection settings and resources for a specific database engine.

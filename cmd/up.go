@@ -213,24 +213,29 @@ func filterTargetsByDriver(targets []config.TargetConfig, driverFilter []string)
 // resolveComposeServices determines which Compose services `up` should start
 // when using a custom or auto-discovered compose file, which may be a shared,
 // multi-engine stack unrelated to what the current project actually needs. It
-// loads the project's own config (if any) and maps each target's driver to
-// its wired container service (config.ContainerConfig.Service, defaulting to
-// the driver name), so `dbctl up` only starts what this project declares —
-// narrowed further to driverFilter when non-empty.
+// loads the project's own config (if any) and combines:
+//   - each target's driver, mapped to its wired container service
+//     (config.ContainerConfig.Service, defaulting to the driver name)
+//   - each entry in config.Config.Services, a plain Compose service name for
+//     a container-only engine (redis, kafka, ...) that isn't a target
 //
-// If no project config can be loaded, driverFilter (if any) is returned as-is
-// so its values are used as literal Compose service names; an empty result
+// so `dbctl up` only starts what this project declares — narrowed further to
+// selector when non-empty (matched against target drivers and Services
+// entries alike).
+//
+// If no project config can be loaded, selector (if any) is returned as-is so
+// its values are used as literal Compose service names; an empty result
 // tells compose.Up to start every service, preserving prior behavior for a
 // bare `--compose` pointing at a file with no associated dbctl config.
-func resolveComposeServices(driverFilter []string) ([]string, error) {
+func resolveComposeServices(selector []string) ([]string, error) {
 	configFile := config.FindProjectConfigFile(cfgFile)
 	cfg, err := config.LoadConfig(configFile, nil)
 	if err != nil {
-		return driverFilter, nil
+		return selector, nil
 	}
 
-	if len(cfg.Targets) == 0 {
-		return nil, fmt.Errorf("no target databases defined in %s", configFile)
+	if len(cfg.Targets) == 0 && len(cfg.Services) == 0 {
+		return nil, fmt.Errorf("no target databases or services defined in %s", configFile)
 	}
 
 	globalPath := config.FindGlobalConfigFile("")
@@ -240,23 +245,52 @@ func resolveComposeServices(driverFilter []string) ([]string, error) {
 		}
 	}
 
-	if len(driverFilter) > 0 {
-		cfg.Targets, err = filterTargetsByDriver(cfg.Targets, driverFilter)
-		if err != nil {
-			return nil, fmt.Errorf("%w (in %s)", err, configFile)
-		}
-	}
-
-	seen := make(map[string]bool, len(cfg.Targets))
-	services := make([]string, 0, len(cfg.Targets))
+	// name is what a selector arg matches against; service is what's passed
+	// to `docker compose up -d`.
+	type wanted struct{ name, service string }
+	all := make([]wanted, 0, len(cfg.Targets)+len(cfg.Services))
 	for _, t := range cfg.Targets {
 		service := t.Driver
 		if t.Container != nil && t.Container.Service != "" {
 			service = t.Container.Service
 		}
-		if !seen[service] {
-			seen[service] = true
-			services = append(services, service)
+		all = append(all, wanted{name: t.Driver, service: service})
+	}
+	for _, s := range cfg.Services {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		all = append(all, wanted{name: strings.ToLower(s), service: s})
+	}
+
+	if len(selector) > 0 {
+		want := make(map[string]bool, len(selector))
+		for _, d := range selector {
+			want[d] = true
+		}
+		matched := make(map[string]bool, len(selector))
+		filtered := make([]wanted, 0, len(all))
+		for _, w := range all {
+			if want[w.name] {
+				matched[w.name] = true
+				filtered = append(filtered, w)
+			}
+		}
+		for _, d := range selector {
+			if !matched[d] {
+				return nil, fmt.Errorf("no target or service %q in %s", d, configFile)
+			}
+		}
+		all = filtered
+	}
+
+	seen := make(map[string]bool, len(all))
+	services := make([]string, 0, len(all))
+	for _, w := range all {
+		if !seen[w.service] {
+			seen[w.service] = true
+			services = append(services, w.service)
 		}
 	}
 
